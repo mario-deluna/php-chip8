@@ -1,0 +1,23 @@
+{
+    "name": "phpgl/visu-quickstart",
+    "autoload": {
+        "psr-4": {
+            "App\\": "src/"
+        }
+    },
+    "require": {
+        "phpgl/visu": "@dev"
+    },
+    "require-dev": {
+        "phpgl/ide-stubs": "dev-main"
+    },
+    "scripts": {
+        "post-root-package-install": [
+            "php ./bin/install.php",
+            "mkdir var/ && mkdir var/cache/ && chmod -R 777 var/"
+        ],
+        "post-autoload-dump": [
+            "ClanCats\\Container\\ComposerContainerFileLoader::generateMap"
+        ]
+    }
+}
