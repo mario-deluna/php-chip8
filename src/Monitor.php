@@ -14,7 +14,7 @@ class Monitor
     )
     {
         $this->blob = new UByteBuffer();
-        $this->blob->fill($width * $height, 0x00);
+        $this->blob->fill($width * $height * 2, 0x00);
     }
 
     public function setPixel(int $x, int $y, int $value)
@@ -24,6 +24,6 @@ class Monitor
 
     public function getPixel(int $x, int $y): int
     {
-        return $this->blob[$x + $y * $this->width];
+        return $this->blob[$x + $y * $this->width] ?: 0;
     }
 }

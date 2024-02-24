@@ -2,6 +2,9 @@
 
 namespace App;
 
+use App\CPU\InstructionHandler;
+use App\CPU\InstructionRegistry;
+use App\CPU\InstructionSet;
 use Exception;
 use GL\Buffer\UByteBuffer;
 use GL\Buffer\UShortBuffer;
@@ -11,22 +14,25 @@ use GL\Buffer\UShortBuffer;
  */
 class CPU
 {
-    private UByteBuffer $registersV;
+    public UByteBuffer $registersV;
 
-    private $registerI = 0x0;
+    public int $registerI = 0x0;
 
-    private $registerVF = 0x0;
+    public int $registerVF = 0x0;
 
-    private UByteBuffer $timers;
+    public UByteBuffer $timers;
 
-    private int $programCounter = 0x200;
+    public int $programCounter = 0x200;
 
-    private int $stackPointer = 0x0;
+    public int $stackPointer = 0x0;
 
-    private UShortBuffer $stack;
+    public UShortBuffer $stack;
 
-    private UByteBuffer $keyPressStates;
+    public UByteBuffer $keyPressStates;
 
+    private InstructionRegistry $instructionSet;
+
+    public array $digitSpriteLocations = [];
 
     public function __construct(
         public Memory $memory,
@@ -44,6 +50,9 @@ class CPU
 
         $this->keyPressStates = new UByteBuffer();
         $this->keyPressStates->fill(16, 0x0);
+
+        // load the default instruction set
+        $this->instructionSet = InstructionSet::defaultSet();
     }
 
     public function loadRomFile(string $filename)
@@ -57,8 +66,41 @@ class CPU
         for($i = 0; $i < count($bytes); $i++) {
             $this->memory->blob[$i + 0x200] = $bytes[$i];
         }
-
     }
+
+    /**
+     * Load the default font into the memory
+     */
+    public function loadDefaultFont() : void
+    {
+        $sprites = [
+            0x0 => [0xF0, 0x90, 0x90, 0x90, 0xF0],
+            0x1 => [0x20, 0x60, 0x20, 0x20, 0x70],
+            0x2 => [0xF0, 0x10, 0xF0, 0x80, 0xF0],
+            0x3 => [0xF0, 0x10, 0xF0, 0x10, 0xF0],
+            0x4 => [0x90, 0x90, 0xF0, 0x10, 0x10],
+            0x5 => [0xF0, 0x80, 0xF0, 0x10, 0xF0],
+            0x6 => [0xF0, 0x80, 0xF0, 0x90, 0xF0],
+            0x7 => [0xF0, 0x10, 0x20, 0x40, 0x40],
+            0x8 => [0xF0, 0x90, 0xF0, 0x90, 0xF0],
+            0x9 => [0xF0, 0x90, 0xF0, 0x10, 0xF0],
+            0xA => [0xF0, 0x90, 0xF0, 0x90, 0x90],
+            0xB => [0xE0, 0x90, 0xE0, 0x90, 0xE0],
+            0xC => [0xF0, 0x80, 0x80, 0x80, 0xF0],
+            0xD => [0xE0, 0x90, 0x90, 0x90, 0xE0],
+            0xE => [0xF0, 0x80, 0xF0, 0x80, 0xF0],
+            0xF => [0xF0, 0x80, 0xF0, 0x80, 0x80]
+        ];
+
+        $i = 0x050;
+        foreach ($sprites as $digit => $sprite) {
+            $this->digitSpriteLocations[$digit] = $i;
+            foreach ($sprite as $byte) {
+                $this->memory->blob[$i++] = $byte;
+            }
+        }
+    }
+
 
     /**
      * Returns the current opcode from the memory and increments to the next one
@@ -98,6 +140,51 @@ class CPU
     }
 
     /**
+     * Return the opcode at the given index
+     */
+    public function getOpcodeAt(int $index): int
+    {
+        return $this->memory->blob[$index] << 8 | $this->memory->blob[$index + 1];
+    }
+
+    /**
+     * Returns the instruction handlers for the given opcodes
+     * 
+     * @param array<int> $opcodes
+     * @return array<InstructionHandler | null>
+     */
+    public function getInstructionHandlersFor(array $opcodes) : array
+    {
+        $handlers = [];
+        foreach ($opcodes as $opcode) {
+            $handlers[] = $this->instructionSet->getHandler($opcode);
+        }
+        return $handlers;
+    }
+
+    /**
+     * Returns the instruction handler for an opcode at a given index
+     * 
+     * @param int $index
+     * @return InstructionHandler | null
+     */
+    public function getInstructionHandlerAt(int $index) : ?InstructionHandler
+    {
+        return $this->instructionSet->getHandler($this->getOpcodeAt($index));
+    }
+
+    /**
+     * Returns the disassembled instruction for the opcode at the given index
+     */
+    public function disassembleInstructionAt(int $index) : ?string
+    {
+        $opcode = $this->getOpcodeAt($index);
+        $handler = $this->instructionSet->getHandler($opcode);
+        return $handler ? $handler->disassemble($opcode) : null;
+    }
+
+
+    /**
      * Runs the CPU until the program ends
      */
     public function run()
@@ -135,7 +222,7 @@ class CPU
      * @param int $count the amount of cycles to run
      * @return int the exit code of the program, -1 if the program is still running
      */
-    public function runCycles(int $count) : int
+    public function runCycles(int $count = 1) : int
     {
         for ($i = 0; $i < $count; $i++) {
             $opcode = $this->fetchOpcode();
@@ -159,449 +246,14 @@ class CPU
         }
     }
 
-    private function opNotImplemented(int $opcode)
-    {
-        // throw new \Exception(sprintf('Opcode 0x%X not implemented', $opcode));
-    }
-
-    private function opDrawPixel(int $opcode)
-    {
-        $x = $this->registersV[$opcode >> 8 & 0x0F];
-        $y = $this->registersV[$opcode >> 4 & 0x0F];
-        $color = $this->registersV[$opcode & 0x0F];
-
-        $this->monitor->setPixel($x, $y, $color);
-    }
-    
-    private function opRandom(int $opcode)
-    {
-        $this->registersV[$opcode >> 8 & 0x0F] = rand(0, 31);
-    }
-
-    /**
-     * 1nnn - JP addr
-     */
-    private function opJump(int $opcode)
-    {
-        $address = $opcode & 0x0FFF;
-        $this->programCounter = $address;
-    }
-
-    /**
-     * 2nnn - CALL addr
-     */
-    private function opCallSubroutine(int $opcode)
-    {
-        $address = $opcode & 0x0FFF;
-        $this->stack[$this->stackPointer++] = $this->programCounter;
-        $this->programCounter = $address;
-    }
-
-    /**
-     * 3xkk - SE Vx, byte
-     */
-    private function opSkipIfEqual(int $opcode)
-    {
-        $register = $opcode >> 8 & 0x0F;
-        $value = $opcode & 0x00FF;
-        
-        if ($this->registersV[$register] === $value) {
-            $this->programCounter += 2;
-        }
-    }
-
-    /**
-     * 4xkk - SNE Vx, byte
-     */
-    private function opSkipIfNotEqual(int $opcode)
-    {
-        $register = $opcode >> 8 & 0x0F;
-        $value = $opcode & 0x00FF;
-        
-        if ($this->registersV[$register] !== $value) {
-            $this->programCounter += 2;
-        }
-    }
-
-    /**
-     * 5xy0 - SE Vx, Vy
-     */
-    private function opSkipIfEqualRegisters(int $opcode)
-    {
-        $registerX = $opcode >> 8 & 0x0F;
-        $registerY = $opcode >> 4 & 0x0F;
-        
-        if ($this->registersV[$registerX] === $this->registersV[$registerY]) {
-            $this->programCounter += 2;
-        }
-    }
-
-    /**
-     * 6xkk - LD Vx, byte
-     */
-    private function opLoadValue(int $opcode)
-    {
-        $register = $opcode >> 8 & 0x0F;
-        $value = $opcode & 0x00FF;
-        $this->registersV[$register] = $value;
-    }
-
-    /**
-     * 7xkk - ADD Vx, byte
-     */
-    private function opAddValue(int $opcode)
-    {
-        $register = $opcode >> 8 & 0x0F;
-        $value = $opcode & 0x00FF;
-        $this->registersV[$register] += $value;
-    }
-
-    /**
-     * 8xy0 - LD Vx, Vy
-     */
-    private function opLoadRegister(int $opcode)
-    {
-        $registerX = $opcode >> 8 & 0x0F;
-        $registerY = $opcode >> 4 & 0x0F;
-        $this->registersV[$registerX] = $this->registersV[$registerY];
-    }
-
-    /**
-     * 8xy1 - OR Vx, Vy
-     */
-    private function opOrRegister(int $opcode)
-    {
-        $registerX = $opcode >> 8 & 0x0F;
-        $registerY = $opcode >> 4 & 0x0F;
-        $this->registersV[$registerX] |= $this->registersV[$registerY];
-    }
-
-    /**
-     * 8xy2 - AND Vx, Vy
-     */
-    private function opAndRegister(int $opcode)
-    {
-        $registerX = $opcode >> 8 & 0x0F;
-        $registerY = $opcode >> 4 & 0x0F;
-        $this->registersV[$registerX] &= $this->registersV[$registerY];
-    }
-
-    /**
-     * 8xy3 - XOR Vx, Vy
-     */
-    private function opXorRegister(int $opcode)
-    {
-        $registerX = $opcode >> 8 & 0x0F;
-        $registerY = $opcode >> 4 & 0x0F;
-        $this->registersV[$registerX] ^= $this->registersV[$registerY];
-    }
-
-    /**
-     * 8xy4 - ADD Vx, Vy
-     */
-    private function opAddRegister(int $opcode)
-    {
-        $registerX = $opcode >> 8 & 0x0F;
-        $registerY = $opcode >> 4 & 0x0F;
-        $result = $this->registersV[$registerX] + $this->registersV[$registerY];
-        $this->registersV[$registerX] = $result & 0xFF;
-        $this->registerVF = $result > 0xFF ? 1 : 0;
-    }
-
-    /**
-     * 8xy5 - SUB Vx, Vy
-     */
-    private function opSubRegister(int $opcode)
-    {
-        $registerX = $opcode >> 8 & 0x0F;
-        $registerY = $opcode >> 4 & 0x0F;
-        $result = $this->registersV[$registerX] - $this->registersV[$registerY];
-        $this->registersV[$registerX] = $result & 0xFF;
-        $this->registerVF = $this->registersV[$registerX] > $this->registersV[$registerY] ? 1 : 0;
-    }
-
-    /**
-     * 8xy6 - SHR Vx {, Vy}
-     */
-    private function opShiftRight(int $opcode) 
-    {
-        $registerX = $opcode >> 8 & 0x0F;
-        $this->registerVF = $this->registersV[$registerX] & 0x01;
-        $this->registersV[$registerX] >>= 1;
-    }
-
-    /**
-     * 8xy7 - SUBN Vx, Vy
-     */
-    private function opSubNRegister(int $opcode)
-    {
-        $registerX = $opcode >> 8 & 0x0F;
-        $registerY = $opcode >> 4 & 0x0F;
-        $result = $this->registersV[$registerY] - $this->registersV[$registerX];
-        $this->registersV[$registerX] = $result & 0xFF;
-        $this->registerVF = $this->registersV[$registerY] > $this->registersV[$registerX] ? 1 : 0;
-    }
-
-    /**
-     * 8xyE - SHL Vx {, Vy}
-     */
-    private function opShiftLeft(int $opcode)
-    {
-        $registerX = $opcode >> 8 & 0x0F;
-        $this->registerVF = $this->registersV[$registerX] >> 7;
-        $this->registersV[$registerX] <<= 1;
-    }
-
-    /**
-     * 9xy0 - SNE Vx, Vy
-     */
-    private function opSkipIfNotEqualRegisters(int $opcode)
-    {
-        $registerX = $opcode >> 8 & 0x0F;
-        $registerY = $opcode >> 4 & 0x0F;
-        
-        if ($this->registersV[$registerX] !== $this->registersV[$registerY]) {
-            $this->programCounter += 2;
-        }
-    }
-
-    /**
-     * Annn - LD I, addr 
-     */
-    private function opLoadI(int $opcode)
-    {
-        $this->registerI = $opcode & 0x0FFF;
-    }
-
-    /**
-     * Bnnn - JP V0, addr
-     */
-    private function opJumpOffset(int $opcode)
-    {
-        $address = $opcode & 0x0FFF;
-        $this->programCounter = $this->registersV[0] + $address;
-    }
-
-    /**
-     * Cxkk - RND Vx, byte
-     */
-    private function opRandomAnd(int $opcode)
-    {
-        $register = $opcode >> 8 & 0x0F;
-        $value = $opcode & 0x00FF;
-        $this->registersV[$register] = rand(0, 255) & $value;
-    }
-
-    /**
-     * Dxyn - DRW Vx, Vy, nibble
-     */
-    private function opDrawSprite(int $opcode)
-    {
-        $x = $this->registersV[$opcode >> 8 & 0x0F];
-        $y = $this->registersV[$opcode >> 4 & 0x0F];
-        $height = $opcode & 0x000F;
-
-        $this->registerVF = 0;
-
-        for ($yline = 0; $yline < $height; $yline++) {
-            $pixel = $this->memory->blob[$this->registerI + $yline];
-            for ($xline = 0; $xline < 8; $xline++) {
-                if (($pixel & (0x80 >> $xline)) !== 0) {
-                    if ($this->monitor->getPixel($x + $xline, $y + $yline) === 1) {
-                        $this->registerVF = 1;
-                    }
-                    $this->monitor->setPixel($x + $xline, $y + $yline, $this->monitor->getPixel($x + $xline, $y + $yline) ^ 1);
-                }
-            }
-        }
-    }
-
-    /**
-     * Ex9E - SKP Vx
-     */
-    private function opSkipIfKeyPressed(int $opcode)
-    {
-        $register = $opcode >> 8 & 0x0F;
-        if ($this->keyPressStates[$this->registersV[$register]] === 1) {
-            $this->programCounter += 2;
-        }
-    }
-
-    /**
-     * ExA1 - SKNP Vx
-     */
-    private function opSkipIfKeyNotPressed(int $opcode)
-    {
-        $register = $opcode >> 8 & 0x0F;
-        if ($this->keyPressStates[$this->registersV[$register]] === 0) {
-            $this->programCounter += 2;
-        }
-    }
-
-    /**
-     * Fx07 - LD Vx, DT
-     */
-    private function opLoadDelayTimer(int $opcode)
-    {
-        $register = $opcode >> 8 & 0x0F;
-        $this->registersV[$register] = $this->timers[0];
-    }
-
-    /**
-     * Fx0A - LD Vx, K
-     */
-    private function opWaitForKeyPress(int $opcode)
-    {
-        $register = $opcode >> 8 & 0x0F;
-        $keyPressed = false;
-        for ($i = 0; $i < 16; $i++) {
-            if ($this->keyPressStates[$i] === 1) {
-                $this->registersV[$register] = $i;
-                $keyPressed = true;
-                break;
-            }
-        }
-
-        if (!$keyPressed) {
-            $this->programCounter -= 2;
-        }
-    }
-
-    /**
-     * Fx15 - LD DT, Vx
-     */
-    private function opSetDelayTimer(int $opcode)
-    {
-        $register = $opcode >> 8 & 0x0F;
-        $this->timers[0] = $this->registersV[$register];
-    }
-
-    /**
-     * Fx18 - LD ST, Vx
-     */
-    private function opSetSoundTimer(int $opcode)
-    {
-        $register = $opcode >> 8 & 0x0F;
-        $this->timers[1] = $this->registersV[$register];
-    }
-
-    /**
-     * Fx1E - ADD I, Vx
-     */
-    private function opAddToI(int $opcode)
-    {
-        $register = $opcode >> 8 & 0x0F;
-        $this->registerI += $this->registersV[$register];
-    }
-
-    /**
-     * Fx29 - LD F, Vx
-     */
-    private function opLoadFont(int $opcode)
-    {
-        // todo
-    }
-
-    /**
-     * Fx33 - LD B, Vx
-     */
-    private function opStoreBCD(int $opcode)
-    {
-        $register = $opcode >> 8 & 0x0F;
-        $value = $this->registersV[$register];
-        $this->memory->blob[$this->registerI] = $value / 100;
-        $this->memory->blob[$this->registerI + 1] = ($value / 10) % 10;
-        $this->memory->blob[$this->registerI + 2] = $value % 10;
-    }
-
-    /**
-     * Fx55 - LD [I], Vx
-     */
-    private function opStoreRegisters(int $opcode)
-    {
-        $register = $opcode >> 8 & 0x0F;
-        for ($i = 0; $i <= $register; $i++) {
-            $this->memory->blob[$this->registerI + $i] = $this->registersV[$i];
-        }
-    }
-
-    /**
-     * Fx65 - LD Vx, [I]
-     */
-    private function opLoadRegisters(int $opcode)
-    {
-        $register = $opcode >> 8 & 0x0F;
-        for ($i = 0; $i <= $register; $i++) {
-            $this->registersV[$i] = $this->memory->blob[$this->registerI + $i];
-        }
-    }
-
-
-    private function handleRegisterOpcodes(int $opcode)
-    {
-        $operation = $opcode & 0x000F;
-
-        match($operation) {
-            0x0 => $this->opLoadRegister($opcode),
-            0x1 => $this->opOrRegister($opcode),
-            0x2 => $this->opAndRegister($opcode),
-            0x3 => $this->opXorRegister($opcode),
-            0x4 => $this->opAddRegister($opcode),
-            0x5 => $this->opSubRegister($opcode),
-            0x6 => $this->opShiftRight($opcode),
-            0x7 => $this->opSubNRegister($opcode),
-            0xE => $this->opShiftLeft($opcode),
-        };
-    }
-
-    private function handleKeyOpcodes(int $opcode)
-    {
-        $operation = $opcode & 0x00FF;
-
-        match($operation) {
-            0x9E => $this->opSkipIfKeyPressed($opcode),
-            0xA1 => $this->opSkipIfKeyNotPressed($opcode),
-        };
-    }
-
-    private function handleTimerOpcodes(int $opcode)
-    {
-        $operation = $opcode & 0x00FF;
-
-        match($operation) {
-            0x07 => $this->opLoadDelayTimer($opcode),
-            0x0A => $this->opWaitForKeyPress($opcode),
-            0x15 => $this->opSetDelayTimer($opcode),
-            0x18 => $this->opSetSoundTimer($opcode),
-            0x1E => $this->opAddToI($opcode),
-            0x29 => $this->opLoadFont($opcode),
-            0x33 => $this->opStoreBCD($opcode),
-            0x55 => $this->opStoreRegisters($opcode),
-            0x65 => $this->opLoadRegisters($opcode),
-        };
-    }
-
     public function executeOpcode(int $opcode)
     {
-        $operation = ($opcode >> 12) & 0x0F;
+        $handler = $this->instructionSet->getHandler($opcode);
 
-        match($operation) {
-            0x0 => $this->opNotImplemented($opcode),
-            0x1 => $this->opJump($opcode),
-            0x2 => $this->opCallSubroutine($opcode),
-            0x3 => $this->opSkipIfEqual($opcode),
-            0x4 => $this->opSkipIfNotEqual($opcode),
-            0x5 => $this->opSkipIfEqualRegisters($opcode),
-            0x6 => $this->opLoadValue($opcode),
-            0x7 => $this->opAddValue($opcode),
-            0x8 => $this->handleRegisterOpcodes($opcode),
-            0x9 => $this->opSkipIfNotEqualRegisters($opcode),
-            0xA => $this->opLoadI($opcode),
-            0xB => $this->opJumpOffset($opcode),
-            0xC => $this->opRandomAnd($opcode),
-            0xD => $this->opDrawSprite($opcode),
-            0xE => $this->handleKeyOpcodes($opcode),
-            0xF => $this->handleTimerOpcodes($opcode),
-        };
+        if ($handler === null) {
+            throw new Exception(sprintf('Opcode 0x%X not implemented', $opcode));
+        }
+
+        $handler->handle($this, $opcode);
     }
 }

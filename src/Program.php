@@ -4,6 +4,21 @@ namespace App;
 
 class Program
 {
+    public static function opClearScreen()
+    {
+        return 0x00E0;
+    }
+
+    public static function opReturn()
+    {
+        return 0x00EE;
+    }
+
+    public static function opCall(int $address)
+    {
+        return 0x2000 | $address;
+    }
+
     public static function opJump(int $address)
     {
         return 0x1000 | $address;

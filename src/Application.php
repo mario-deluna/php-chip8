@@ -7,6 +7,7 @@ use Error;
 use GL\VectorGraphics\{VGAlign, VGColor, VGContext};
 
 use VISU\Graphics\{RenderTarget, Texture, TextureOptions};
+use VISU\Graphics\Rendering\Pass\ClearPass;
 use VISU\Graphics\Rendering\RenderContext;
 use VISU\Graphics\Rendering\Resource\RenderTargetResource;
 use VISU\OS\{InputActionMap, Key};
@@ -41,6 +42,8 @@ class Application extends QuickstartApp
         $actions->bindButton('pause', Key::SPACE);
         $actions->bindButton('step', Key::S);
         $actions->bindButton('fullscreen', Key::F);
+        $actions->bindButton('toggle_crt', Key::T);
+        $actions->bindButton('toggle_ghosting', Key::G);
 
         $this->inputContext->registerAndActivate('main', $actions);
 
@@ -52,22 +55,8 @@ class Application extends QuickstartApp
         // create the chip8
         $this->monitor = new Monitor;
         $this->chip8 = new CPU(new Memory, $this->monitor);
-        
 
-        // // randomly fill the monitor
-        // for ($i = 0; $i < 64; $i++) {
-        //     for ($j = 0; $j < 32; $j++) {
-        //         $this->monitor->setPixel($i, $j, rand(0, 255));
-        //     }
-        // }
-        
-        // // create a simple program
-        // $this->chip8->memory->storeOpcode(0x0, Program::opJump(200));
-        // $this->chip8->memory->storeOpcode(200, Program::opRandom(0));
-        // $this->chip8->memory->storeOpcode(202, Program::opRandom(1));
-        // $this->chip8->memory->storeOpcode(204, Program::opRandom(2));
-        // $this->chip8->memory->storeOpcode(206, Program::opDrawPixel(0, 1, 2));
-        // $this->chip8->memory->storeOpcode(208, Program::opJump(0));
+        $this->chip8->loadDefaultFont();
 
         $args = $this->container->getParameter('argv');
         $romFile = $args[0] ?? null;
@@ -88,7 +77,6 @@ class Application extends QuickstartApp
         // create a renderer for the monitor
         $this->monitorRenderer = new MonitorRenderer($this->gl);
     }
-
     /**
      * Prepare / setup additional render passes before the quickstart draw pass 
      * This is an "setup" method meaning you should not emit any draw calls here, but 
@@ -125,19 +113,35 @@ class Application extends QuickstartApp
      */
     public function draw(RenderContext $context, RenderTarget $renderTarget) : void
     {
-        // clear the screen
-        // $renderTarget->framebuffer()->clear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-
         QuickstartDebugMetricsOverlay::debugString('Current opcode: ' . dechex($this->chip8->peekOpcode()));
 
+        $currentInst = $this->chip8->programCounter;
 
         // draw the current opcode
-        // $this->vg->fontFace('inconsolata');
-        // $this->vg->fontSize(16);
-        // $this->vg->fillColor(VGColor::white());
+        $this->vg->fontFace('inconsolata');
+        $this->vg->fontSize(16);
+        $this->vg->fillColor(VGColor::white());
+        $this->vg->textAlign(VGAlign::LEFT | VGAlign::TOP);
 
-        // $this->vg->text(10, 10, 'Current opcode: ' . dechex($this->chip8->peekOpcode()));
+        $range = 20;
+        $ystart = 50;
+        // dissassemble the next 20 instructions and last 20 instructions
+        for ($i = $currentInst - $range; $i < $currentInst + $range; $i += 2) {
+            if ($i < 0) {
+                continue;
+            }
 
+            if ($i == $currentInst) {
+                $this->vg->fillColor(VGColor::red());
+            } else {
+                $this->vg->fillColor(VGColor::white());
+            }
+
+            if ($string = $this->chip8->disassembleInstructionAt($i)) {
+                $offset = $i - $currentInst + 20;
+                $this->vg->text(10, $ystart + $offset * 10, $string);
+            }
+        }
     }
 
     /**
@@ -168,11 +172,40 @@ class Application extends QuickstartApp
             $this->monitorRenderer->fullscreen = !$this->monitorRenderer->fullscreen;
         }
 
+        // toggle crt effect
+        if ($this->inputContext->actions->didButtonPress('toggle_crt')) {
+            $this->monitorRenderer->crtEffect = !$this->monitorRenderer->crtEffect;
+        }
+
+        // toggle ghosting
+        if ($this->inputContext->actions->didButtonPress('toggle_ghosting')) {
+            $this->monitorRenderer->ghostingEffect = !$this->monitorRenderer->ghostingEffect;
+        }
+
+        // update the keyboard states
+        $this->chip8->keyPressStates[0x1] = (int) $this->input->isKeyPressed(Key::NUM_1);
+        $this->chip8->keyPressStates[0x2] = (int) $this->input->isKeyPressed(Key::NUM_2);
+        $this->chip8->keyPressStates[0x3] = (int) $this->input->isKeyPressed(Key::NUM_3);
+        $this->chip8->keyPressStates[0xC] = (int) $this->input->isKeyPressed(Key::NUM_4);
+        $this->chip8->keyPressStates[0x4] = (int) $this->input->isKeyPressed(Key::Q);
+        $this->chip8->keyPressStates[0x5] = (int) $this->input->isKeyPressed(Key::W);
+        $this->chip8->keyPressStates[0x6] = (int) $this->input->isKeyPressed(Key::E);
+        $this->chip8->keyPressStates[0xD] = (int) $this->input->isKeyPressed(Key::R);
+        $this->chip8->keyPressStates[0x7] = (int) $this->input->isKeyPressed(Key::A);
+        $this->chip8->keyPressStates[0x8] = (int) $this->input->isKeyPressed(Key::S);
+        $this->chip8->keyPressStates[0x9] = (int) $this->input->isKeyPressed(Key::D);
+        $this->chip8->keyPressStates[0xE] = (int) $this->input->isKeyPressed(Key::F);
+        $this->chip8->keyPressStates[0xA] = (int) $this->input->isKeyPressed(Key::Y);
+        $this->chip8->keyPressStates[0x0] = (int) $this->input->isKeyPressed(Key::X);
+        $this->chip8->keyPressStates[0xB] = (int) $this->input->isKeyPressed(Key::C);
+        $this->chip8->keyPressStates[0xF] = (int) $this->input->isKeyPressed(Key::V);
+
+
         if (!$this->isRunning) {
             return;
         }
 
         $this->chip8->updateTimers();
-        $this->chip8->runCycles(1000);
+        $this->chip8->runCycles(8);
     }
 }

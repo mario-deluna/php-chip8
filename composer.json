@@ -9,7 +9,8 @@
         "phpgl/visu": "@dev"
     },
     "require-dev": {
-        "phpgl/ide-stubs": "dev-main"
+        "phpgl/ide-stubs": "dev-main",
+        "phpunit/phpunit": "^11.0"
     },
     "scripts": {
         "post-root-package-install": [
