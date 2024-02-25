@@ -71,14 +71,14 @@ class GuiRenderer
             return;
         }
 
-        $underMonitor = $this->renderMonitorFrame();
+        $underMonitor = $this->renderMonitorFrame($cpu);
         $this->renderKeyboard($underMonitor, $cpu);
     }
 
     /**
      * @return Vec2 The xy position of the monitor bottom left corner
      */
-    public function renderMonitorFrame() : Vec2
+    public function renderMonitorFrame(CPU $cpu) : Vec2
     {
         $this->vg->beginPath();
 
@@ -136,6 +136,19 @@ class GuiRenderer
         $this->vg->fillColor(VGColor::white());
         $this->vg->text($pos->x + $size->x * 0.5, $textY, 'PHP CHIP-8');
 
+
+        // render a power LED on the right when the CPU is running
+        $ledPos = $pos;
+        $ledPos->y = $frontPanelVBB->x + $this->monitorFrameFrontPanel * 0.5 + 5;
+
+        $this->vg->beginPath();
+        $this->vg->circle($ledPos->x, $ledPos->y, 5.0);
+        $this->vg->strokeColor(VGColor::black());
+        $this->vg->fillColor(!$this->renderState->cpuIsRunning ? new VGColor(0.8, 0.2, 0.2, 1.0) : new VGColor(0.2, 0.8, 0.2, 1.0));
+        $this->vg->strokeWidth(2);
+        $this->vg->fill();
+        $this->vg->stroke();
+
         return new Vec2($framePos->x, $frontPanelVBB->y);
     }
 
@@ -155,6 +168,9 @@ class GuiRenderer
         $didPress = $this->input->hasMouseButtonBeenPressed(MouseButton::LEFT);
         $isPressed = $this->input->isMouseButtonPressed(MouseButton::LEFT);
 
+        $buttonId = ((string) $pos) . $text;
+        static $lastButtonPress = [];
+
         // render a the indent for the button
         $this->vg->beginPath();
         $this->vg->circle($pos->x, $pos->y, $radius);
@@ -166,9 +182,22 @@ class GuiRenderer
         $this->vg->circle($pos->x, $pos->y, $radius * 0.9);
         $this->vg->fillColor(VGColor::black());
         if (($isHovering && ($isPressed || $didPress)) || $isActive) {
-            $this->vg->fillColor(new VGColor(0.973, 0.875, 0.012, 1.0));
+            $lastButtonPress[$buttonId] = glfwGetTime();
         }
         $this->vg->fill();
+
+        // we fade out the highlight after a while
+        $hoveringTime = 2.0;
+        if (isset($lastButtonPress[$buttonId]) && glfwGetTime() - $lastButtonPress[$buttonId] < $hoveringTime) {
+
+            $fadeDelta = $lastButtonPress[$buttonId] - glfwGetTime() + $hoveringTime;
+            $fadeDelta /= $hoveringTime;
+
+            $this->vg->beginPath();
+            $this->vg->circle($pos->x, $pos->y, $radius * 0.9);
+            $this->vg->fillColor(new VGColor(0.973, 0.875, 0.012, $fadeDelta));
+            $this->vg->fill();
+        }
 
         // btn colors
         $buttonInnerA = new VGColor(0.263, 0.149, 0.027, 1.0);

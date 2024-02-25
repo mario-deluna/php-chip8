@@ -6,11 +6,9 @@ use App\Renderer\GuiRenderer;
 use App\Renderer\MonitorRenderer;
 use App\Renderer\RenderState;
 use Error;
-use GL\Math\Vec2;
 use GL\VectorGraphics\{VGAlign, VGColor, VGContext};
 
 use VISU\Graphics\{RenderTarget, Texture, TextureOptions, Viewport};
-use VISU\Graphics\Rendering\Pass\ClearPass;
 use VISU\Graphics\Rendering\RenderContext;
 use VISU\Graphics\Rendering\Resource\RenderTargetResource;
 use VISU\OS\{InputActionMap, Key};
@@ -117,6 +115,8 @@ class Application extends QuickstartApp
             1.0
 
         );
+
+        $this->renderState->cpuIsRunning = $this->isRunning;
 
         // upload the buffer
         $options = new TextureOptions();

@@ -189,7 +189,8 @@ class MonitorRenderer
             vec4 color = texture(u_texture, tex_coords);
 
             // slightly darken the color
-            color *= 0.95;
+            //color *= 0.995;
+            color *= 0.99;
 
             fragment_color = color;
         }

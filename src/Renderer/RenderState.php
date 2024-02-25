@@ -18,6 +18,11 @@ class RenderState
     public Vec2 $monitorOffest;
 
     /**
+     * Is the CPU currently running?
+     */
+    public bool $cpuIsRunning = false;
+
+    /**
      * Should the monitor be rendered in fullscreen?
      * (Otherwise it will be rendered in the top right corner)
      */
@@ -41,7 +46,7 @@ class RenderState
 
         // move the mointor a bit into the viewport
         $pos = $pos - $this->monitorOffest;
-        
+
         return $pos;
     }
 
