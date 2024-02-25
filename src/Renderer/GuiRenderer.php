@@ -27,6 +27,11 @@ class GuiRenderer
     public VGColor $bodyColorDark;
     public VGColor $panelColor;
 
+    public VGColor $displayColorStart;
+    public VGColor $displayColorEnd;
+    public VGColor $displayColorBorderer;
+    public VGColor $displayColorText;
+
     public function __construct(
         private VGContext $vg,
         private RenderState $renderState,
@@ -36,6 +41,11 @@ class GuiRenderer
         $this->bodyColorLight = new VGColor(0.776, 0.639, 0.541, 1.0);
         $this->bodyColorDark = new VGColor(0.565, 0.451, 0.369, 1.0);
         $this->panelColor = new VGColor(0.675, 0.549, 0.459, 1.0);
+
+        $this->displayColorStart = new VGColor(0.016, 0.286, 0.271, 1.0);
+        $this->displayColorEnd = new VGColor(0.027, 0.384, 0.353, 1.0);
+        $this->displayColorBorderer = new VGColor(0.027, 0.173, 0.161, 1.0);
+        $this->displayColorText = new VGColor(0.576, 1.0, 0.706, 1.0);
     }
 
     /**
@@ -73,6 +83,7 @@ class GuiRenderer
 
         $underMonitor = $this->renderMonitorFrame($cpu);
         $this->renderKeyboard($underMonitor, $cpu);
+        $this->renderStatePanel($underMonitor->x - $this->panelPadding, $cpu);
     }
 
     /**
@@ -290,5 +301,62 @@ class GuiRenderer
                 $cpu->keyPressStates[$n] = $isDown ? 1 : 0;
             }
         }
+    }
+
+    public function renderTinyDisplay(Vec2 $pos, Vec2 $size, string $text)
+    {
+        $gradiend = $this->vg->linearGradient(0, $pos->y, 0, $pos->y + $size->y, $this->displayColorStart, $this->displayColorEnd);
+
+        $this->vg->beginPath();
+        $this->vg->roundedRect($pos->x, $pos->y, $size->x, $size->y, 6);
+        $this->vg->fillPaint($gradiend);
+        $this->vg->strokeColor($this->displayColorBorderer);
+        $this->vg->fill();
+        $this->vg->strokeWidth(2);
+        $this->vg->stroke();
+
+        $this->vg->fontFace('vt323');
+        $this->vg->fontSize(30);
+        $this->vg->textAlign(VGAlign::LEFT | VGAlign::MIDDLE);
+
+
+        // render a glow
+        $this->vg->fontBlur(10);
+        $this->vg->fillColor($this->displayColorText);
+        $this->vg->text($pos->x + 10, $pos->y + $size->y * 0.5, $text);
+
+        // render the actual text   
+        $this->vg->fontBlur(0);
+        $this->vg->fillColor($this->displayColorText);
+        $this->vg->text($pos->x + 10, $pos->y + $size->y * 0.5, $text);        
+    }
+
+    public function renderStatePanel(float $width, CPU $cpu)
+    {
+        $pos = new Vec2($this->panelPadding, $this->panelPadding);
+        $panelSize = new Vec2($width - $pos->x, 350);
+
+        $this->renderBodyPanel($pos, $panelSize, false, $this->panelRadius);
+
+        // inside
+        $innerPos = $pos + new Vec2($this->panelBorderWidth, $this->panelBorderWidth);
+        $innerSize = $panelSize - new Vec2($this->panelBorderWidth * 2, $this->panelBorderWidth * 2);
+
+        $this->vg->beginPath();
+        $this->vg->fillColor($this->panelColor);    
+        $this->vg->roundedRect($innerPos->x, $innerPos->y, $innerSize->x, $innerSize->y, $this->panelRadius * 0.8);
+        $this->vg->fill();
+
+        // render a small display 
+        $displayPos = $innerPos + new Vec2(20, 20);
+        $displaySize = new Vec2(100, 50);
+
+        // get a 4 digit hex string
+        $this->renderTinyDisplay($displayPos, $displaySize, 'C ' . str_pad(dechex($cpu->programCounter), 4, '0', STR_PAD_LEFT));
+
+        // render the index register
+        $displayPos->y = $displayPos->y + 60;
+        $this->renderTinyDisplay($displayPos, $displaySize, 'I ' . str_pad(dechex($cpu->registerI), 4, '0', STR_PAD_LEFT));
+
     }
 }
