@@ -59,4 +59,28 @@ class CPUTest extends TestCase
         $cpu->runCycles(1);
         $this->assertEquals(0x200, $cpu->programCounter);
     }
+
+    public function testComparison()
+    {
+        $cpu = $this->createCPU();
+        $cpu->memory->storeOpcode(0x200, Program::opLoadValue(0x1, 0x42));
+        $cpu->memory->storeOpcode(0x202, Program::opSkipIfEqualValue(0x1, 0x42));
+        $cpu->memory->storeOpcode(0x204, Program::opLoadValue(0x2, 0xFF));
+        $cpu->memory->storeOpcode(0x206, Program::opExit());
+        $cpu->run();
+
+        // reister 2 should still be 0
+        $this->assertEquals(0, $cpu->registers[0x2]);
+
+        // now a not
+        $cpu = $this->createCPU();
+        $cpu->memory->storeOpcode(0x200, Program::opLoadValue(0x1, 0x42));
+        $cpu->memory->storeOpcode(0x202, Program::opSkipIfNotEqualValue(0x1, 0x42));
+        $cpu->memory->storeOpcode(0x204, Program::opLoadValue(0x2, 0xFF));
+        $cpu->memory->storeOpcode(0x206, Program::opExit());
+        $cpu->run();
+
+        // reister 2 should now be 0xFF
+        $this->assertEquals(0xFF, $cpu->registers[0x2]);
+    }
 }

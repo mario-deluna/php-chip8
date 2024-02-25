@@ -24,12 +24,6 @@ class MonitorRenderer
     private ShaderProgram $shaderProgramScreen;
 
     /**
-     * If the monitor should be rendered in fullscreen
-     * (Otherwise it will be rendered in the top right corner)
-     */
-    public bool $fullscreen = false;
-
-    /**
      * MonoChrome mode
      * This just means the monitor will be rendered in black and white
      */
@@ -52,6 +46,7 @@ class MonitorRenderer
      */
     public function __construct(
         GLState $glstate,
+        private RenderState $renderState
     )
     {
         // create the shader program
@@ -67,12 +62,19 @@ class MonitorRenderer
         // im lazy to so just transform in the shader via uniforms
         uniform vec2 position;
         uniform vec2 size;
+        uniform vec2 screen_size;
 
         out vec2 tex_coords;
 
         void main()
         {
-            vec2 pos = aPos.xy * size + position;
+            // position are in screen space pixel coordinates
+            vec2 npos = position;
+            npos.y = screen_size.y - npos.y - size.y;
+            vec2 npos_normalized = (2.0 * npos) / screen_size - 1.0;
+            vec2 nsize = (2.0 * size) / screen_size;
+
+            vec2 pos = npos_normalized + ((aPos.xy + 1.0) * 0.5) * nsize;
 
             gl_Position = vec4(pos, aPos.z, 1.0);
             tex_coords = aTexCoord;
@@ -330,13 +332,27 @@ class MonitorRenderer
                     $this->shaderProgram,
                 );
 
-                if ($this->fullscreen) {
-                    $quadPass->extraUniforms['position'] = new Vec2(0, 0);
-                    $quadPass->extraUniforms['size'] = new Vec2(1, 1);
-                } else {
-                    $quadPass->extraUniforms['position'] = new Vec2(0.5, 0.5);
-                    $quadPass->extraUniforms['size'] = new Vec2(0.5, 0.5);
-                }
+                $monitorPos = $this->renderState->getMonitorPosition();
+                $monitorSize = $this->renderState->getMonitorSize();
+
+                // var_dump($monitorPos, $monitorSize); die;
+
+                $quadPass->extraUniforms['position'] = $monitorPos;
+                $quadPass->extraUniforms['size'] = $monitorSize;
+                $quadPass->extraUniforms['screen_size'] = new Vec2(
+                    $renderTarget->width / $renderTarget->contentScaleX, 
+                    $renderTarget->height / $renderTarget->contentScaleY
+                );
+
+
+
+                // if ($this->renderState->fullscreenMonitor) {
+                //     $quadPass->extraUniforms['position'] = new Vec2(0, 0);
+                //     $quadPass->extraUniforms['size'] = new Vec2(1, 1);
+                // } else {
+                //     $quadPass->extraUniforms['position'] = new Vec2(0.5, 0.5);
+                //     $quadPass->extraUniforms['size'] = new Vec2(0.5, 0.5);
+                // }
 
                 $quadPass->extraUniforms['u_time'] = glfwGetTime();
                 $quadPass->extraUniforms['u_crt_effect'] = (int) $this->crtEffect;

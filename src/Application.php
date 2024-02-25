@@ -2,11 +2,14 @@
 
 namespace App;
 
+use App\Renderer\GuiRenderer;
 use App\Renderer\MonitorRenderer;
+use App\Renderer\RenderState;
 use Error;
+use GL\Math\Vec2;
 use GL\VectorGraphics\{VGAlign, VGColor, VGContext};
 
-use VISU\Graphics\{RenderTarget, Texture, TextureOptions};
+use VISU\Graphics\{RenderTarget, Texture, TextureOptions, Viewport};
 use VISU\Graphics\Rendering\Pass\ClearPass;
 use VISU\Graphics\Rendering\RenderContext;
 use VISU\Graphics\Rendering\Resource\RenderTargetResource;
@@ -23,7 +26,11 @@ class Application extends QuickstartApp
 
     private bool $isRunning = false;
 
+    private RenderState $renderState;
+
     private MonitorRenderer $monitorRenderer;
+
+    private GuiRenderer $guiRenderer;
 
     /**
      * A function that is invoked once the app is ready to run.
@@ -47,9 +54,13 @@ class Application extends QuickstartApp
 
         $this->inputContext->registerAndActivate('main', $actions);
 
-        // load the inconsolata font to display the current score
-        if ($this->vg->createFont('inconsolata', VISU_PATH_FRAMEWORK_RESOURCES_FONT . '/inconsolata/Inconsolata-Regular.ttf') === -1) {
-            throw new Error('Inconsolata font could not be loaded.');
+        // load the VT323 font
+        if ($this->vg->createFont('vt323', VISU_PATH_RESOURCES . '/font/VT323-Regular.ttf') === -1) {
+            throw new Error('vt323 font could not be loaded.');
+        }
+
+        if ($this->vg->createFont('bebas', VISU_PATH_RESOURCES . '/font/BebasNeue-Regular.ttf') === -1) {
+            throw new Error('Bebas font could not be loaded.');
         }
 
         // create the chip8
@@ -73,9 +84,15 @@ class Application extends QuickstartApp
 
         // create a texture for the monitor
         $this->monitorTexture = new Texture($this->gl, 'chip8_monitor');
+        
+        // rendering state
+        $this->renderState = new RenderState;
 
         // create a renderer for the monitor
-        $this->monitorRenderer = new MonitorRenderer($this->gl);
+        $this->monitorRenderer = new MonitorRenderer($this->gl, $this->renderState);
+
+        // create a renderer for the GUI
+        $this->guiRenderer = new GuiRenderer($this->vg, $this->renderState, $this->input);
     }
     /**
      * Prepare / setup additional render passes before the quickstart draw pass 
@@ -88,6 +105,19 @@ class Application extends QuickstartApp
      */
     public function setupDrawBefore(RenderContext $context, RenderTargetResource $renderTarget) : void
     {
+        // we construct a viewport that matches the render target
+        // this is not what we would usally use this helper for but in this case
+        // its just a nice helper to work with our screen real estate
+        $this->renderState->viewport = new Viewport(
+            0, 
+            $renderTarget->width / $renderTarget->contentScaleX,
+            $renderTarget->height / $renderTarget->contentScaleY,
+            0, 
+            1.0, 
+            1.0
+
+        );
+
         // upload the buffer
         $options = new TextureOptions();
         $options->dataFormat = GL_RED_INTEGER;
@@ -117,8 +147,11 @@ class Application extends QuickstartApp
 
         $currentInst = $this->chip8->programCounter;
 
+        // draw the screen frame
+        $this->guiRenderer->renderGUI($this->chip8);
+
         // draw the current opcode
-        $this->vg->fontFace('inconsolata');
+        $this->vg->fontFace('vt323');
         $this->vg->fontSize(16);
         $this->vg->fillColor(VGColor::white());
         $this->vg->textAlign(VGAlign::LEFT | VGAlign::TOP);
@@ -169,7 +202,7 @@ class Application extends QuickstartApp
 
         // toggle fullscreen
         if ($this->inputContext->actions->didButtonPress('fullscreen')) {
-            $this->monitorRenderer->fullscreen = !$this->monitorRenderer->fullscreen;
+            $this->renderState->fullscreenMonitor = !$this->renderState->fullscreenMonitor;
         }
 
         // toggle crt effect
@@ -183,29 +216,32 @@ class Application extends QuickstartApp
         }
 
         // update the keyboard states
-        $this->chip8->keyPressStates[0x1] = (int) $this->input->isKeyPressed(Key::NUM_1);
-        $this->chip8->keyPressStates[0x2] = (int) $this->input->isKeyPressed(Key::NUM_2);
-        $this->chip8->keyPressStates[0x3] = (int) $this->input->isKeyPressed(Key::NUM_3);
-        $this->chip8->keyPressStates[0xC] = (int) $this->input->isKeyPressed(Key::NUM_4);
-        $this->chip8->keyPressStates[0x4] = (int) $this->input->isKeyPressed(Key::Q);
-        $this->chip8->keyPressStates[0x5] = (int) $this->input->isKeyPressed(Key::W);
-        $this->chip8->keyPressStates[0x6] = (int) $this->input->isKeyPressed(Key::E);
-        $this->chip8->keyPressStates[0xD] = (int) $this->input->isKeyPressed(Key::R);
-        $this->chip8->keyPressStates[0x7] = (int) $this->input->isKeyPressed(Key::A);
-        $this->chip8->keyPressStates[0x8] = (int) $this->input->isKeyPressed(Key::S);
-        $this->chip8->keyPressStates[0x9] = (int) $this->input->isKeyPressed(Key::D);
-        $this->chip8->keyPressStates[0xE] = (int) $this->input->isKeyPressed(Key::F);
-        $this->chip8->keyPressStates[0xA] = (int) $this->input->isKeyPressed(Key::Y);
-        $this->chip8->keyPressStates[0x0] = (int) $this->input->isKeyPressed(Key::X);
-        $this->chip8->keyPressStates[0xB] = (int) $this->input->isKeyPressed(Key::C);
-        $this->chip8->keyPressStates[0xF] = (int) $this->input->isKeyPressed(Key::V);
-
+        if ($this->chip8->wantKeyboardUpdates) {
+            $this->chip8->keyPressStates[0x1] = (int) $this->input->isKeyPressed(Key::NUM_1);
+            $this->chip8->keyPressStates[0x2] = (int) $this->input->isKeyPressed(Key::NUM_2);
+            $this->chip8->keyPressStates[0x3] = (int) $this->input->isKeyPressed(Key::NUM_3);
+            $this->chip8->keyPressStates[0xC] = (int) $this->input->isKeyPressed(Key::NUM_4);
+            $this->chip8->keyPressStates[0x4] = (int) $this->input->isKeyPressed(Key::Q);
+            $this->chip8->keyPressStates[0x5] = (int) $this->input->isKeyPressed(Key::W);
+            $this->chip8->keyPressStates[0x6] = (int) $this->input->isKeyPressed(Key::E);
+            $this->chip8->keyPressStates[0xD] = (int) $this->input->isKeyPressed(Key::R);
+            $this->chip8->keyPressStates[0x7] = (int) $this->input->isKeyPressed(Key::A);
+            $this->chip8->keyPressStates[0x8] = (int) $this->input->isKeyPressed(Key::S);
+            $this->chip8->keyPressStates[0x9] = (int) $this->input->isKeyPressed(Key::D);
+            $this->chip8->keyPressStates[0xE] = (int) $this->input->isKeyPressed(Key::F);
+            $this->chip8->keyPressStates[0xA] = (int) $this->input->isKeyPressed(Key::Y);
+            $this->chip8->keyPressStates[0x0] = (int) $this->input->isKeyPressed(Key::X);
+            $this->chip8->keyPressStates[0xB] = (int) $this->input->isKeyPressed(Key::C);
+            $this->chip8->keyPressStates[0xF] = (int) $this->input->isKeyPressed(Key::V);
+        }
 
         if (!$this->isRunning) {
             return;
         }
 
         $this->chip8->updateTimers();
-        $this->chip8->runCycles(8);
+        if ($this->chip8->runCycles(8) === 0) {
+            $this->isRunning = false;
+        }
     }
 }

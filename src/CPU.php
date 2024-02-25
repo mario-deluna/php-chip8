@@ -14,11 +14,11 @@ use GL\Buffer\UShortBuffer;
  */
 class CPU
 {
-    public UByteBuffer $registersV;
+    public bool $shouldExit = false;
+
+    public UByteBuffer $registers;
 
     public int $registerI = 0x0;
-
-    public int $registerVF = 0x0;
 
     public UByteBuffer $timers;
 
@@ -32,6 +32,8 @@ class CPU
 
     private InstructionRegistry $instructionSet;
 
+    public bool $wantKeyboardUpdates = true;
+
     public array $digitSpriteLocations = [];
 
     public function __construct(
@@ -39,8 +41,8 @@ class CPU
         public Monitor $monitor
     )
     {
-        $this->registersV = new UByteBuffer();
-        $this->registersV->fill(16, 0x0); 
+        $this->registers = new UByteBuffer();
+        $this->registers->fill(16, 0x0); 
 
         $this->timers = new UByteBuffer();
         $this->timers->fill(2, 0x0);
@@ -185,16 +187,22 @@ class CPU
 
 
     /**
-     * Runs the CPU until the program ends
+     * Runs the CPU until the program ends or the timeout is reached
      */
-    public function run()
+    public function run(float $timeout = 60) : int
     {
-        while (true) {
+        $startTime = microtime(true);
+
+        while (!$this->shouldExit) {
+            if (microtime(true) - $startTime > $timeout) {
+                return -2;
+            }
+
             $opcode = $this->fetchOpcode();
-            echo sprintf('exec: 0x%X' . PHP_EOL, $opcode);
             $this->executeOpcode($opcode);
-            sleep(1);
         }
+
+        return 0;
     }
 
     /**
@@ -209,6 +217,10 @@ class CPU
         $endTime = $startTime + $deltaTimeInMs / 1000.0;
 
         while (microtime(true) < $endTime) {
+            if ($this->shouldExit) {
+                return 0;
+            }
+
             $opcode = $this->fetchOpcode();
             $this->executeOpcode($opcode);
         }
@@ -225,6 +237,10 @@ class CPU
     public function runCycles(int $count = 1) : int
     {
         for ($i = 0; $i < $count; $i++) {
+            if ($this->shouldExit) {
+                return 0;
+            }
+
             $opcode = $this->fetchOpcode();
             $this->executeOpcode($opcode);
         }

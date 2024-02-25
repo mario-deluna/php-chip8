@@ -33,6 +33,16 @@ class InstructionSet
                         $cpu->programCounter = $cpu->stack[--$cpu->stackPointer];
                     }
                 },
+
+                0xFD => new class extends InstructionHandler {
+                    public function disassemble(int $opcode): string {
+                        return 'EXIT';
+                    }
+
+                    public function handle(CPU $cpu, int $opcode): void {
+                        $cpu->shouldExit = true;
+                    }
+                },
             ]
         );
 
@@ -52,7 +62,7 @@ class InstructionSet
                         $registerX = ($opcode & 0x0F00) >> 8;
                         $registerY = ($opcode & 0x00F0) >> 4;
 
-                        $cpu->registersV[$registerX] = $cpu->registersV[$registerY];
+                        $cpu->registers[$registerX] = $cpu->registers[$registerY];
                     }
                 },
 
@@ -69,7 +79,7 @@ class InstructionSet
                         $registerX = ($opcode & 0x0F00) >> 8;
                         $registerY = ($opcode & 0x00F0) >> 4;
 
-                        $cpu->registersV[$registerX] |= $cpu->registersV[$registerY];
+                        $cpu->registers[$registerX] |= $cpu->registers[$registerY];
                     }
                 },
 
@@ -86,7 +96,7 @@ class InstructionSet
                         $registerX = ($opcode & 0x0F00) >> 8;
                         $registerY = ($opcode & 0x00F0) >> 4;
 
-                        $cpu->registersV[$registerX] &= $cpu->registersV[$registerY];
+                        $cpu->registers[$registerX] &= $cpu->registers[$registerY];
                     }
                 },
 
@@ -103,7 +113,7 @@ class InstructionSet
                         $registerX = ($opcode & 0x0F00) >> 8;
                         $registerY = ($opcode & 0x00F0) >> 4;
 
-                        $cpu->registersV[$registerX] ^= $cpu->registersV[$registerY];
+                        $cpu->registers[$registerX] ^= $cpu->registers[$registerY];
                     }
                 },
 
@@ -120,9 +130,9 @@ class InstructionSet
                         $registerX = ($opcode & 0x0F00) >> 8;
                         $registerY = ($opcode & 0x00F0) >> 4;
 
-                        $sum = $cpu->registersV[$registerX] + $cpu->registersV[$registerY];
-                        $cpu->registersV[$registerX] = $sum & 0xFF;
-                        $cpu->registerVF = $sum > 0xFF ? 1 : 0;
+                        $sum = $cpu->registers[$registerX] + $cpu->registers[$registerY];
+                        $cpu->registers[$registerX] = $sum & 0xFF;
+                        $cpu->registers[0xF] = $sum > 0xFF ? 1 : 0;
                     }
                 },
 
@@ -139,9 +149,9 @@ class InstructionSet
                         $registerX = ($opcode & 0x0F00) >> 8;
                         $registerY = ($opcode & 0x00F0) >> 4;
 
-                        $diff = $cpu->registersV[$registerX] - $cpu->registersV[$registerY];
-                        $cpu->registersV[$registerX] = $diff & 0xFF;
-                        $cpu->registerVF = $diff >= 0 ? 1 : 0;
+                        $diff = $cpu->registers[$registerX] - $cpu->registers[$registerY];
+                        $cpu->registers[$registerX] = $diff & 0xFF;
+                        $cpu->registers[0xF] = $diff >= 0 ? 1 : 0;
                     }
                 },
 
@@ -156,9 +166,9 @@ class InstructionSet
 
                     public function handle(CPU $cpu, int $opcode): void {
                         $registerX = ($opcode & 0x0F00) >> 8;
-                        $lsb = $cpu->registersV[$registerX] & 0x1;
-                        $cpu->registersV[$registerX] >>= 1;
-                        $cpu->registerVF = $lsb;
+                        $lsb = $cpu->registers[$registerX] & 0x1;
+                        $cpu->registers[$registerX] >>= 1;
+                        $cpu->registers[0xF] = $lsb;
                     }
                 },
 
@@ -175,9 +185,9 @@ class InstructionSet
                         $registerX = ($opcode & 0x0F00) >> 8;
                         $registerY = ($opcode & 0x00F0) >> 4;
 
-                        $diff = $cpu->registersV[$registerY] - $cpu->registersV[$registerX];
-                        $cpu->registersV[$registerX] = $diff & 0xFF;
-                        $cpu->registerVF = $diff >= 0 ? 1 : 0;
+                        $diff = $cpu->registers[$registerY] - $cpu->registers[$registerX];
+                        $cpu->registers[$registerX] = $diff & 0xFF;
+                        $cpu->registers[0xF] = $diff >= 0 ? 1 : 0;
                     }
                 },
 
@@ -192,9 +202,9 @@ class InstructionSet
 
                     public function handle(CPU $cpu, int $opcode): void {
                         $registerX = ($opcode & 0x0F00) >> 8;
-                        $msb = $cpu->registersV[$registerX] >> 7;
-                        $cpu->registersV[$registerX] <<= 1;
-                        $cpu->registerVF = $msb;
+                        $msb = $cpu->registers[$registerX] >> 7;
+                        $cpu->registers[$registerX] <<= 1;
+                        $cpu->registers[0xF] = $msb;
                     }
                 },
             ]
@@ -214,7 +224,7 @@ class InstructionSet
 
                     public function handle(CPU $cpu, int $opcode): void {
                         $register = $opcode >> 8 & 0x0F;
-                        if ($cpu->keyPressStates[$cpu->registersV[$register]] === 1) {
+                        if ($cpu->keyPressStates[$cpu->registers[$register]] === 1) {
                             $cpu->programCounter += 2;
                         }
                     }
@@ -231,7 +241,7 @@ class InstructionSet
 
                     public function handle(CPU $cpu, int $opcode): void {
                         $register = $opcode >> 8 & 0x0F;
-                        if ($cpu->keyPressStates[$cpu->registersV[$register]] === 0) {
+                        if ($cpu->keyPressStates[$cpu->registers[$register]] === 0) {
                             $cpu->programCounter += 2;
                         }
                     }
@@ -253,7 +263,7 @@ class InstructionSet
 
                     public function handle(CPU $cpu, int $opcode): void {
                         $register = ($opcode & 0x0F00) >> 8;
-                        $cpu->registersV[$register] = $cpu->timers[0];
+                        $cpu->registers[$register] = $cpu->timers[0];
                     }
                 },
 
@@ -271,7 +281,7 @@ class InstructionSet
                         $keyPressed = false;
                         for ($i = 0; $i < 16; $i++) {
                             if ($cpu->keyPressStates[$i] === 1) {
-                                $cpu->registersV[$register] = $i;
+                                $cpu->registers[$register] = $i;
                                 $keyPressed = true;
                                 break;
                             }
@@ -293,7 +303,7 @@ class InstructionSet
 
                     public function handle(CPU $cpu, int $opcode): void {
                         $register = ($opcode & 0x0F00) >> 8;
-                        $cpu->timers[0] = $cpu->registersV[$register];
+                        $cpu->timers[0] = $cpu->registers[$register];
                     }
                 },
 
@@ -309,7 +319,7 @@ class InstructionSet
 
                     public function handle(CPU $cpu, int $opcode): void {
                         $register = ($opcode & 0x0F00) >> 8;
-                        $cpu->timers[1] = $cpu->registersV[$register];
+                        $cpu->timers[1] = $cpu->registers[$register];
                     }
                 },
 
@@ -324,7 +334,7 @@ class InstructionSet
 
                     public function handle(CPU $cpu, int $opcode): void {
                         $register = ($opcode & 0x0F00) >> 8;
-                        $cpu->registerI += $cpu->registersV[$register];
+                        $cpu->registerI += $cpu->registers[$register];
                     }
                 },
 
@@ -339,7 +349,7 @@ class InstructionSet
 
                     public function handle(CPU $cpu, int $opcode): void {
                         $register = ($opcode & 0x0F00) >> 8;
-                        $digit = $cpu->registersV[$register];
+                        $digit = $cpu->registers[$register];
                         $loc = $cpu->digitSpriteLocations[$digit];
                         $cpu->registerI = $loc;
                     }
@@ -356,10 +366,10 @@ class InstructionSet
 
                     public function handle(CPU $cpu, int $opcode): void {
                         $register = ($opcode & 0x0F00) >> 8;
-                        $value = $cpu->registersV[$register];
+                        $value = $cpu->registers[$register];
                         
                         $cpu->memory->blob[$cpu->registerI] = (int) ($value / 100);
-                        $cpu->memory->blob[$cpu->registerI + 1] = (int) (($value / 10) % 10);
+                        $cpu->memory->blob[$cpu->registerI + 1] = (int) (((int)($value / 10)) % 10);
                         $cpu->memory->blob[$cpu->registerI + 2] = (int) ($value % 10);
                     }
                 },
@@ -376,7 +386,7 @@ class InstructionSet
                     public function handle(CPU $cpu, int $opcode): void {
                         $endRegister = ($opcode & 0x0F00) >> 8;
                         for ($i = 0; $i <= $endRegister; $i++) {
-                            $cpu->memory->blob[$cpu->registerI + $i] = $cpu->registersV[$i];
+                            $cpu->memory->blob[$cpu->registerI + $i] = $cpu->registers[$i];
                         }
                     }
                 },
@@ -393,7 +403,7 @@ class InstructionSet
                     public function handle(CPU $cpu, int $opcode): void {
                         $endRegister = ($opcode & 0x0F00) >> 8;
                         for ($i = 0; $i <= $endRegister; $i++) {
-                            $cpu->registersV[$i] = $cpu->memory->blob[$cpu->registerI + $i];
+                            $cpu->registers[$i] = $cpu->memory->blob[$cpu->registerI + $i];
                         }
                     }
                 },
@@ -449,7 +459,7 @@ class InstructionSet
                         $register = ($opcode & 0x0F00) >> 8;
                         $value = $opcode & 0x00FF;
 
-                        if ($cpu->registersV[$register] === $value) {
+                        if ($cpu->registers[$register] === $value) {
                             $cpu->programCounter += 2;
                         }
                     }
@@ -468,7 +478,7 @@ class InstructionSet
                         $register = ($opcode & 0x0F00) >> 8;
                         $value = $opcode & 0x00FF;
 
-                        if ($cpu->registersV[$register] !== $value) {
+                        if ($cpu->registers[$register] !== $value) {
                             $cpu->programCounter += 2;
                         }
                     }
@@ -487,7 +497,7 @@ class InstructionSet
                         $registerX = ($opcode & 0x0F00) >> 8;
                         $registerY = ($opcode & 0x00F0) >> 4;
 
-                        if ($cpu->registersV[$registerX] === $cpu->registersV[$registerY]) {
+                        if ($cpu->registers[$registerX] === $cpu->registers[$registerY]) {
                             $cpu->programCounter += 2;
                         }
                     }
@@ -506,7 +516,7 @@ class InstructionSet
                         $register = ($opcode & 0x0F00) >> 8;
                         $value = $opcode & 0x00FF;
 
-                        $cpu->registersV[$register] = $value;
+                        $cpu->registers[$register] = $value;
                     }
                 },
 
@@ -523,7 +533,7 @@ class InstructionSet
                         $register = ($opcode & 0x0F00) >> 8;
                         $value = $opcode & 0x00FF;
 
-                        $cpu->registersV[$register] += $value;
+                        $cpu->registers[$register] += $value;
                     }
                 },
 
@@ -545,7 +555,7 @@ class InstructionSet
                         $registerX = ($opcode & 0x0F00) >> 8;
                         $registerY = ($opcode & 0x00F0) >> 4;
 
-                        if ($cpu->registersV[$registerX] !== $cpu->registersV[$registerY]) {
+                        if ($cpu->registers[$registerX] !== $cpu->registers[$registerY]) {
                             $cpu->programCounter += 2;
                         }
                     }
@@ -576,7 +586,7 @@ class InstructionSet
 
                     public function handle(CPU $cpu, int $opcode): void {
                         $address = $opcode & 0x0FFF;
-                        $cpu->programCounter = $cpu->registersV[0] + $address;
+                        $cpu->programCounter = $cpu->registers[0] + $address;
                     }
                 },
 
@@ -593,7 +603,7 @@ class InstructionSet
                         $register = ($opcode & 0x0F00) >> 8;
                         $value = $opcode & 0x00FF;
 
-                        $cpu->registersV[$register] = random_int(0, 255) & $value;
+                        $cpu->registers[$register] = random_int(0, 255) & $value;
                     }
                 },
 
@@ -607,18 +617,18 @@ class InstructionSet
                     }
 
                     public function handle(CPU $cpu, int $opcode): void {
-                        $x = $cpu->registersV[($opcode & 0x0F00) >> 8];
-                        $y = $cpu->registersV[($opcode & 0x00F0) >> 4];
+                        $x = $cpu->registers[($opcode & 0x0F00) >> 8];
+                        $y = $cpu->registers[($opcode & 0x00F0) >> 4];
                         $height = $opcode & 0x000F;
 
-                        $cpu->registerVF = 0;
+                        $cpu->registers[0xF] = 0;
 
                         for ($yline = 0; $yline < $height; $yline++) {
                             $pixel = $cpu->memory->blob[$cpu->registerI + $yline];
                             for ($xline = 0; $xline < 8; $xline++) {
                                 if (($pixel & (0x80 >> $xline)) !== 0) {
                                     if ($cpu->monitor->getPixel($x + $xline, $y + $yline) === 1) {
-                                        $cpu->registerVF = 1;
+                                        $cpu->registers[0xF] = 1;
                                     }
                                     $cpu->monitor->setPixel($x + $xline, $y + $yline, $cpu->monitor->getPixel($x + $xline, $y + $yline) ^ 1);
                                 }

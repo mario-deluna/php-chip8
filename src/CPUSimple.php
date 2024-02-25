@@ -11,7 +11,7 @@ use GL\Buffer\UShortBuffer;
  */
 class CPU
 {
-    private UByteBuffer $registersV;
+    private UByteBuffer $registers;
 
     private int $registerI = 0x0;
 
@@ -33,8 +33,8 @@ class CPU
         public Monitor $monitor
     )
     {
-        $this->registersV = new UByteBuffer();
-        $this->registersV->fill(16, 0x0); 
+        $this->registers = new UByteBuffer();
+        $this->registers->fill(16, 0x0); 
 
         $this->timers = new UByteBuffer();
         $this->timers->fill(2, 0x0);
@@ -166,16 +166,16 @@ class CPU
 
     private function opDrawPixel(int $opcode)
     {
-        $x = $this->registersV[$opcode >> 8 & 0x0F];
-        $y = $this->registersV[$opcode >> 4 & 0x0F];
-        $color = $this->registersV[$opcode & 0x0F];
+        $x = $this->registers[$opcode >> 8 & 0x0F];
+        $y = $this->registers[$opcode >> 4 & 0x0F];
+        $color = $this->registers[$opcode & 0x0F];
 
         $this->monitor->setPixel($x, $y, $color);
     }
     
     private function opRandom(int $opcode)
     {
-        $this->registersV[$opcode >> 8 & 0x0F] = rand(0, 31);
+        $this->registers[$opcode >> 8 & 0x0F] = rand(0, 31);
     }
 
     /**
@@ -205,7 +205,7 @@ class CPU
         $register = $opcode >> 8 & 0x0F;
         $value = $opcode & 0x00FF;
         
-        if ($this->registersV[$register] === $value) {
+        if ($this->registers[$register] === $value) {
             $this->programCounter += 2;
         }
     }
@@ -218,7 +218,7 @@ class CPU
         $register = $opcode >> 8 & 0x0F;
         $value = $opcode & 0x00FF;
         
-        if ($this->registersV[$register] !== $value) {
+        if ($this->registers[$register] !== $value) {
             $this->programCounter += 2;
         }
     }
@@ -231,7 +231,7 @@ class CPU
         $registerX = $opcode >> 8 & 0x0F;
         $registerY = $opcode >> 4 & 0x0F;
         
-        if ($this->registersV[$registerX] === $this->registersV[$registerY]) {
+        if ($this->registers[$registerX] === $this->registers[$registerY]) {
             $this->programCounter += 2;
         }
     }
@@ -243,7 +243,7 @@ class CPU
     {
         $register = $opcode >> 8 & 0x0F;
         $value = $opcode & 0x00FF;
-        $this->registersV[$register] = $value;
+        $this->registers[$register] = $value;
     }
 
     /**
@@ -253,7 +253,7 @@ class CPU
     {
         $register = $opcode >> 8 & 0x0F;
         $value = $opcode & 0x00FF;
-        $this->registersV[$register] += $value;
+        $this->registers[$register] += $value;
     }
 
     /**
@@ -263,7 +263,7 @@ class CPU
     {
         $registerX = $opcode >> 8 & 0x0F;
         $registerY = $opcode >> 4 & 0x0F;
-        $this->registersV[$registerX] = $this->registersV[$registerY];
+        $this->registers[$registerX] = $this->registers[$registerY];
     }
 
     /**
@@ -273,7 +273,7 @@ class CPU
     {
         $registerX = $opcode >> 8 & 0x0F;
         $registerY = $opcode >> 4 & 0x0F;
-        $this->registersV[$registerX] |= $this->registersV[$registerY];
+        $this->registers[$registerX] |= $this->registers[$registerY];
     }
 
     /**
@@ -283,7 +283,7 @@ class CPU
     {
         $registerX = $opcode >> 8 & 0x0F;
         $registerY = $opcode >> 4 & 0x0F;
-        $this->registersV[$registerX] &= $this->registersV[$registerY];
+        $this->registers[$registerX] &= $this->registers[$registerY];
     }
 
     /**
@@ -293,7 +293,7 @@ class CPU
     {
         $registerX = $opcode >> 8 & 0x0F;
         $registerY = $opcode >> 4 & 0x0F;
-        $this->registersV[$registerX] ^= $this->registersV[$registerY];
+        $this->registers[$registerX] ^= $this->registers[$registerY];
     }
 
     /**
@@ -303,8 +303,8 @@ class CPU
     {
         $registerX = $opcode >> 8 & 0x0F;
         $registerY = $opcode >> 4 & 0x0F;
-        $result = $this->registersV[$registerX] + $this->registersV[$registerY];
-        $this->registersV[$registerX] = $result & 0xFF;
+        $result = $this->registers[$registerX] + $this->registers[$registerY];
+        $this->registers[$registerX] = $result & 0xFF;
         $this->registerVF = $result > 0xFF ? 1 : 0;
     }
 
@@ -315,9 +315,9 @@ class CPU
     {
         $registerX = $opcode >> 8 & 0x0F;
         $registerY = $opcode >> 4 & 0x0F;
-        $result = $this->registersV[$registerX] - $this->registersV[$registerY];
-        $this->registersV[$registerX] = $result & 0xFF;
-        $this->registerVF = $this->registersV[$registerX] > $this->registersV[$registerY] ? 1 : 0;
+        $result = $this->registers[$registerX] - $this->registers[$registerY];
+        $this->registers[$registerX] = $result & 0xFF;
+        $this->registerVF = $this->registers[$registerX] > $this->registers[$registerY] ? 1 : 0;
     }
 
     /**
@@ -326,8 +326,8 @@ class CPU
     private function opShiftRight(int $opcode) 
     {
         $registerX = $opcode >> 8 & 0x0F;
-        $this->registerVF = $this->registersV[$registerX] & 0x01;
-        $this->registersV[$registerX] >>= 1;
+        $this->registerVF = $this->registers[$registerX] & 0x01;
+        $this->registers[$registerX] >>= 1;
     }
 
     /**
@@ -337,9 +337,9 @@ class CPU
     {
         $registerX = $opcode >> 8 & 0x0F;
         $registerY = $opcode >> 4 & 0x0F;
-        $result = $this->registersV[$registerY] - $this->registersV[$registerX];
-        $this->registersV[$registerX] = $result & 0xFF;
-        $this->registerVF = $this->registersV[$registerY] > $this->registersV[$registerX] ? 1 : 0;
+        $result = $this->registers[$registerY] - $this->registers[$registerX];
+        $this->registers[$registerX] = $result & 0xFF;
+        $this->registerVF = $this->registers[$registerY] > $this->registers[$registerX] ? 1 : 0;
     }
 
     /**
@@ -348,8 +348,8 @@ class CPU
     private function opShiftLeft(int $opcode)
     {
         $registerX = $opcode >> 8 & 0x0F;
-        $this->registerVF = $this->registersV[$registerX] >> 7;
-        $this->registersV[$registerX] <<= 1;
+        $this->registerVF = $this->registers[$registerX] >> 7;
+        $this->registers[$registerX] <<= 1;
     }
 
     /**
@@ -360,7 +360,7 @@ class CPU
         $registerX = $opcode >> 8 & 0x0F;
         $registerY = $opcode >> 4 & 0x0F;
         
-        if ($this->registersV[$registerX] !== $this->registersV[$registerY]) {
+        if ($this->registers[$registerX] !== $this->registers[$registerY]) {
             $this->programCounter += 2;
         }
     }
@@ -379,7 +379,7 @@ class CPU
     private function opJumpOffset(int $opcode)
     {
         $address = $opcode & 0x0FFF;
-        $this->programCounter = $this->registersV[0] + $address;
+        $this->programCounter = $this->registers[0] + $address;
     }
 
     /**
@@ -389,7 +389,7 @@ class CPU
     {
         $register = $opcode >> 8 & 0x0F;
         $value = $opcode & 0x00FF;
-        $this->registersV[$register] = rand(0, 255) & $value;
+        $this->registers[$register] = rand(0, 255) & $value;
     }
 
     /**
@@ -397,8 +397,8 @@ class CPU
      */
     private function opDrawSprite(int $opcode)
     {
-        $x = $this->registersV[$opcode >> 8 & 0x0F];
-        $y = $this->registersV[$opcode >> 4 & 0x0F];
+        $x = $this->registers[$opcode >> 8 & 0x0F];
+        $y = $this->registers[$opcode >> 4 & 0x0F];
         $height = $opcode & 0x000F;
 
         $this->registerVF = 0;
@@ -422,7 +422,7 @@ class CPU
     private function opSkipIfKeyPressed(int $opcode)
     {
         $register = $opcode >> 8 & 0x0F;
-        if ($this->keyPressStates[$this->registersV[$register]] === 1) {
+        if ($this->keyPressStates[$this->registers[$register]] === 1) {
             $this->programCounter += 2;
         }
     }
@@ -433,7 +433,7 @@ class CPU
     private function opSkipIfKeyNotPressed(int $opcode)
     {
         $register = $opcode >> 8 & 0x0F;
-        if ($this->keyPressStates[$this->registersV[$register]] === 0) {
+        if ($this->keyPressStates[$this->registers[$register]] === 0) {
             $this->programCounter += 2;
         }
     }
@@ -444,7 +444,7 @@ class CPU
     private function opLoadDelayTimer(int $opcode)
     {
         $register = $opcode >> 8 & 0x0F;
-        $this->registersV[$register] = $this->timers[0];
+        $this->registers[$register] = $this->timers[0];
     }
 
     /**
@@ -456,7 +456,7 @@ class CPU
         $keyPressed = false;
         for ($i = 0; $i < 16; $i++) {
             if ($this->keyPressStates[$i] === 1) {
-                $this->registersV[$register] = $i;
+                $this->registers[$register] = $i;
                 $keyPressed = true;
                 break;
             }
@@ -473,7 +473,7 @@ class CPU
     private function opSetDelayTimer(int $opcode)
     {
         $register = $opcode >> 8 & 0x0F;
-        $this->timers[0] = $this->registersV[$register];
+        $this->timers[0] = $this->registers[$register];
     }
 
     /**
@@ -482,7 +482,7 @@ class CPU
     private function opSetSoundTimer(int $opcode)
     {
         $register = $opcode >> 8 & 0x0F;
-        $this->timers[1] = $this->registersV[$register];
+        $this->timers[1] = $this->registers[$register];
     }
 
     /**
@@ -491,7 +491,7 @@ class CPU
     private function opAddToI(int $opcode)
     {
         $register = $opcode >> 8 & 0x0F;
-        $this->registerI += $this->registersV[$register];
+        $this->registerI += $this->registers[$register];
     }
 
     /**
@@ -508,7 +508,7 @@ class CPU
     private function opStoreBCD(int $opcode)
     {
         $register = $opcode >> 8 & 0x0F;
-        $value = $this->registersV[$register];
+        $value = $this->registers[$register];
         $this->memory->blob[$this->registerI] = $value / 100;
         $this->memory->blob[$this->registerI + 1] = ($value / 10) % 10;
         $this->memory->blob[$this->registerI + 2] = $value % 10;
@@ -521,7 +521,7 @@ class CPU
     {
         $register = $opcode >> 8 & 0x0F;
         for ($i = 0; $i <= $register; $i++) {
-            $this->memory->blob[$this->registerI + $i] = $this->registersV[$i];
+            $this->memory->blob[$this->registerI + $i] = $this->registers[$i];
         }
     }
 
@@ -532,7 +532,7 @@ class CPU
     {
         $register = $opcode >> 8 & 0x0F;
         for ($i = 0; $i <= $register; $i++) {
-            $this->registersV[$i] = $this->memory->blob[$this->registerI + $i];
+            $this->registers[$i] = $this->memory->blob[$this->registerI + $i];
         }
     }
 
