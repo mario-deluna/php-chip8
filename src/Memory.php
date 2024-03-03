@@ -13,7 +13,12 @@ class Memory
     )
     {
         $this->blob = new UByteBuffer();
-        $this->blob->fill($size, 0x0);
+        $this->reset();
+    }
+
+    public function reset() 
+    {
+        $this->blob->fill($this->size, 0x0);
     }
 
     public function storeOpcode(int $address, int $opcode)

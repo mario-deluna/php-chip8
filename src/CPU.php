@@ -70,6 +70,20 @@ class CPU
         }
     }
 
+    public function reset()
+    {
+        $this->registers->fill(16, 0x0);
+        $this->registerI = 0x0;
+        $this->programCounter = 0x200;
+        $this->stackPointer = 0x0;
+        $this->stack->fill(64, 0x0);
+        $this->timers->fill(2, 0x0);
+        $this->keyPressStates->fill(16, 0x0);
+        $this->monitor->reset();
+        $this->memory->reset();
+        $this->shouldExit = false;
+    }
+
     /**
      * Load the default font into the memory
      */

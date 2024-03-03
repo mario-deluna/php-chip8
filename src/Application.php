@@ -11,10 +11,11 @@ use GL\VectorGraphics\{VGAlign, VGColor, VGContext};
 use VISU\Graphics\{RenderTarget, Texture, TextureOptions, Viewport};
 use VISU\Graphics\Rendering\RenderContext;
 use VISU\Graphics\Rendering\Resource\RenderTargetResource;
-use VISU\OS\{InputActionMap, Key};
+use VISU\OS\{Input, InputActionMap, Key};
 
 use VISU\Quickstart\QuickstartApp;
 use VISU\Quickstart\Render\QuickstartDebugMetricsOverlay;
+use VISU\Signals\Input\DropSignal;
 
 class Application extends QuickstartApp
 {
@@ -68,17 +69,23 @@ class Application extends QuickstartApp
         $this->chip8->loadDefaultFont();
 
         $args = $this->container->getParameter('argv');
-        $romFile = $args[0] ?? null;
-        if (!$romFile) {
-            die('Please provide a ROM file as the first argument.');
+        if ($romFile = $args[0] ?? null) {
+            $romFile = realpath($romFile);
+
+            if (!file_exists($romFile)) {
+                die(sprintf('Rom "%s" does not exist and could not be loaded.', $romFile));
+            }
+
+            $this->chip8->loadRomFile($romFile);
         }
 
-        $romFile = realpath($romFile);
-        if (!file_exists($romFile)) {
-            die('The provided ROM file does not exist.');
-        }
-
-        $this->chip8->loadRomFile($romFile);
+        // register a file drop callback
+        $this->dispatcher->register(Input::EVENT_DROP, function(DropSignal $signal) {
+            $firstFile = $signal->paths[0] ?? null;
+            $this->chip8->reset();
+            $this->chip8->loadRomFile($firstFile);
+            $this->isRunning = true;
+        });
 
         // create a texture for the monitor
         $this->monitorTexture = new Texture($this->gl, 'chip8_monitor');
@@ -92,6 +99,7 @@ class Application extends QuickstartApp
         // create a renderer for the GUI
         $this->guiRenderer = new GuiRenderer($this->vg, $this->renderState, $this->input);
     }
+
     /**
      * Prepare / setup additional render passes before the quickstart draw pass 
      * This is an "setup" method meaning you should not emit any draw calls here, but 

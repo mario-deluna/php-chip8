@@ -32,6 +32,9 @@ class GuiRenderer
     public VGColor $displayColorBorderer;
     public VGColor $displayColorText;
 
+    public VGColor $valuePanelColorStart;
+    public VGColor $valuePanelColorEnd;
+
     public function __construct(
         private VGContext $vg,
         private RenderState $renderState,
@@ -46,6 +49,9 @@ class GuiRenderer
         $this->displayColorEnd = new VGColor(0.027, 0.384, 0.353, 1.0);
         $this->displayColorBorderer = new VGColor(0.027, 0.173, 0.161, 1.0);
         $this->displayColorText = new VGColor(0.576, 1.0, 0.706, 1.0);
+
+        $this->valuePanelColorStart = new VGColor(0.31, 0.31, 0.31, 1.0);
+        $this->valuePanelColorEnd = new VGColor(0.314, 0.29, 0.259, 1.0);
     }
 
     /**
@@ -121,7 +127,7 @@ class GuiRenderer
 
 
         // render front panel text
-        $this->vg->fontFace('bebas');
+        $this->vg->fontFace('vt323');
         $this->vg->fontSize(32);
         $this->vg->textAlign(VGAlign::CENTER | VGAlign::MIDDLE);
 
@@ -316,7 +322,7 @@ class GuiRenderer
         $this->vg->stroke();
 
         $this->vg->fontFace('vt323');
-        $this->vg->fontSize(30);
+        $this->vg->fontSize(40);
         $this->vg->textAlign(VGAlign::LEFT | VGAlign::MIDDLE);
 
 
@@ -331,10 +337,70 @@ class GuiRenderer
         $this->vg->text($pos->x + 10, $pos->y + $size->y * 0.5, $text);        
     }
 
+    public function renderValuePanel(Vec2 $pos, Vec2 $size)
+    {
+        $this->vg->beginPath();
+        $paint = $this->vg->linearGradient(0, $pos->y, 0, $pos->y + $size->y, $this->valuePanelColorStart, $this->valuePanelColorEnd);
+        $this->vg->fillPaint($paint);
+        $this->vg->roundedRect($pos->x, $pos->y, $size->x, $size->y, 8);
+        $this->vg->fill();
+    }
+
+    public function renderValueDisplay(Vec2 $pos, Vec2 $size, string $value, string $label)
+    {
+        $this->renderValuePanel($pos, $size);
+
+        $padding = 8;
+        $height = $size->y * 0.5 - $padding;
+
+        $this->vg->fontFace('bebas');
+        $this->vg->fontSize(16);
+        $this->vg->textAlign(VGAlign::CENTER | VGAlign::MIDDLE);
+        $this->vg->fillColor(new VGColor(0.647, 0.647, 0.647, 1.0));
+        $this->vg->text(
+            $pos->x + $size->x * 0.5,
+            $pos->y - $padding + $height * 2,
+            $label
+        );
+
+        // render display on top
+        $dpos = $pos + new Vec2($padding, $padding);
+        $dsize = new Vec2($size->x - $padding * 2, $height);
+
+        $this->renderTinyDisplay($dpos, $dsize, $value);
+    }
+
+    /**
+     * Register display looks very similar to the value one but the label is on the left
+     */
+    public function renderRegisterDisplay(Vec2 $pos, Vec2 $size, string $value, string $label)
+    {
+        $this->renderValuePanel($pos, $size);
+
+        $padding = 8;
+        $width = $size->x * 0.5 - $padding;
+
+        $this->vg->fontFace('bebas');
+        $this->vg->fontSize(16);
+        $this->vg->textAlign(VGAlign::LEFT | VGAlign::MIDDLE);
+        $this->vg->fillColor(new VGColor(0.647, 0.647, 0.647, 1.0));
+        $this->vg->text(
+            $pos->x + $padding,
+            $pos->y + $size->y * 0.5,
+            $label
+        );
+
+        // render display on right
+        $dpos = $pos + new Vec2($size->x * 0.5, $padding);
+        $dsize = new Vec2($width, $size->y - $padding * 2);
+
+        $this->renderTinyDisplay($dpos, $dsize, $value);
+    }
+
     public function renderStatePanel(float $width, CPU $cpu)
     {
         $pos = new Vec2($this->panelPadding, $this->panelPadding);
-        $panelSize = new Vec2($width - $pos->x, 350);
+        $panelSize = new Vec2($width - $pos->x, 382);
 
         $this->renderBodyPanel($pos, $panelSize, false, $this->panelRadius);
 
@@ -347,16 +413,40 @@ class GuiRenderer
         $this->vg->roundedRect($innerPos->x, $innerPos->y, $innerSize->x, $innerSize->y, $this->panelRadius * 0.8);
         $this->vg->fill();
 
-        // render a small display 
-        $displayPos = $innerPos + new Vec2(20, 20);
-        $displaySize = new Vec2(100, 50);
 
-        // get a 4 digit hex string
-        $this->renderTinyDisplay($displayPos, $displaySize, 'C ' . str_pad(dechex($cpu->programCounter), 4, '0', STR_PAD_LEFT));
+        // we render 4 displays at the top for
+        // - program counter
+        // - stack pointer
+        // - register I
+        // - delay timer
+        $gutter = 10;
+        $x = $innerPos->x + $gutter;
+        $displaySize = new Vec2(($innerSize->x - $gutter * 5) * 0.25, 100);
+        $displayPos = $innerPos + new Vec2($gutter, $gutter);
+        
+        $this->renderValueDisplay($displayPos, $displaySize, str_pad(dechex($cpu->programCounter), 4, '0', STR_PAD_LEFT), 'Program Counter');
+        $displayPos->x = $displayPos->x + $displaySize->x + $gutter;
+        $this->renderValueDisplay($displayPos, $displaySize, str_pad(dechex($cpu->stackPointer), 4, '0', STR_PAD_LEFT), 'Stack Pointer');
+        $displayPos->x = $displayPos->x + $displaySize->x + $gutter;
+        $this->renderValueDisplay($displayPos, $displaySize, str_pad(dechex($cpu->registerI), 4, '0', STR_PAD_LEFT), 'Register I');
+        $displayPos->x = $displayPos->x + $displaySize->x + $gutter;
+        $this->renderValueDisplay($displayPos, $displaySize, str_pad(dechex($cpu->timers[0]), 2, '0', STR_PAD_LEFT), 'Delay Timer');
 
-        // render the index register
-        $displayPos->y = $displayPos->y + 60;
-        $this->renderTinyDisplay($displayPos, $displaySize, 'I ' . str_pad(dechex($cpu->registerI), 4, '0', STR_PAD_LEFT));
+        $startY = $displayPos->y + $displaySize->y;
+    
+        // render the 16 registers in a 4x4 grid
+        $gutter = 10;
+        $x = $innerPos->x + $gutter;
+        $displaySize = new Vec2(($innerSize->x - $gutter * 5) * 0.25, 50);
+        $displayPos = $innerPos + new Vec2($gutter, $startY);
 
+        for ($i = 0; $i < 16; $i++) {
+            $this->renderRegisterDisplay($displayPos, $displaySize, strtoupper(str_pad(dechex($cpu->registers[$i]), 2, '0', STR_PAD_LEFT)), 'V' . dechex($i));
+            $displayPos->x = $displayPos->x + $displaySize->x + $gutter;
+            if ($i % 4 == 3) {
+                $displayPos->x = $innerPos->x + $gutter;
+                $displayPos->y = $displayPos->y + $displaySize->y + $gutter;
+            }
+        }
     }
 }
