@@ -5,12 +5,15 @@ namespace App\Renderer;
 use App\CPU;
 use GL\Buffer\UByteBuffer;
 use GL\Math\Vec2;
+use GL\Math\Vec4;
 use GL\VectorGraphics\VGAlign;
 use GL\VectorGraphics\VGColor;
 use GL\VectorGraphics\VGContext;
 use GL\VectorGraphics\VGPaint;
 use VISU\OS\Input;
 use VISU\OS\MouseButton;
+use VISU\Signal\Dispatcher;
+use VISU\Signal\Signal;
 
 class GuiRenderer
 {
@@ -38,7 +41,8 @@ class GuiRenderer
     public function __construct(
         private VGContext $vg,
         private RenderState $renderState,
-        private Input $input
+        private Input $input,
+        private Dispatcher $dispatcher
     )
     {
         $this->bodyColorLight = new VGColor(0.776, 0.639, 0.541, 1.0);
@@ -89,7 +93,8 @@ class GuiRenderer
 
         $underMonitor = $this->renderMonitorFrame($cpu);
         $this->renderKeyboard($underMonitor, $cpu);
-        $this->renderStatePanel($underMonitor->x - $this->panelPadding, $cpu);
+        $nextPanel = $this->renderStatePanel($underMonitor->x - $this->panelPadding, $cpu);
+        $this->renderDissaemblyPanel($nextPanel, $underMonitor->x - $this->panelPadding, $cpu);
     }
 
     /**
@@ -178,14 +183,30 @@ class GuiRenderer
      * @param bool $continues If true the button will return true as long as the mouse is pressed
      * @return bool 
      */
-    public function renderRoundButton(Vec2 $pos, float $radius, string $text, bool $isActive = false, bool $continues = false) : bool 
+    public function renderRoundButton(
+        Vec2 $pos, 
+        float $radius, 
+        string $text, 
+        bool $isActive = false, 
+        bool $continues = false, 
+        string $font = 'bebas',
+        int $fontSize = 32
+    ) : bool 
     {
         $mousePos = $this->input->getCursorPosition();
         $isHovering = $mousePos->distanceTo($pos) < $radius;
-        $didPress = $this->input->hasMouseButtonBeenPressed(MouseButton::LEFT);
+        $didPress = $this->input->hasMouseButtonBeenPressedThisFrame(MouseButton::LEFT);
         $isPressed = $this->input->isMouseButtonPressed(MouseButton::LEFT);
 
-        $buttonId = ((string) $pos) . $text;
+        $id = $text;
+        // if the text contains a @@ we use the second part as the id
+        if (strpos($text, '@@') !== false) {
+            $parts = explode('@@', $text);
+            $id = $parts[1];
+            $text = $parts[0];
+        }
+
+        $buttonId = ((string) $pos) . $id;
         static $lastButtonPress = [];
 
         // render a the indent for the button
@@ -238,11 +259,20 @@ class GuiRenderer
         $this->vg->strokeWidth(2);
         $this->vg->stroke();
 
-        $this->vg->fontFace('bebas');
-        $this->vg->fontSize(32);
+        $this->vg->fontFace($font);
+        $this->vg->fontSize($fontSize);
         $this->vg->textAlign(VGAlign::CENTER | VGAlign::MIDDLE);
         $this->vg->fillColor(VGColor::white());
-        $this->vg->text($pos->x, $pos->y + 3, $text);
+
+        // handle font specific offests
+        if ($font === 'bebas') {
+            $pos = $pos + new Vec2(0, 3);
+        }
+        elseif ($font === 'icons') {
+            $pos = $pos + new Vec2(0, 0);
+        }
+
+        $this->vg->text($pos->x, $pos->y, $text);
 
         if (!$isHovering) return false;
 
@@ -307,6 +337,16 @@ class GuiRenderer
                 $cpu->keyPressStates[$n] = $isDown ? 1 : 0;
             }
         }
+
+        // if ($this->renderState->fullscreenMonitor) {
+        //     if ($this->renderRoundButton($innerPos + new Vec2(30, 30), 30, "@@pause", false, false, 'icons', '20')) {
+        //         $this->dispatcher->dispatch('cpu.pause', new Signal);
+        //     }
+        // } else {
+        //     if ($this->renderRoundButton($innerPos + new Vec2(30, 30), 30, "@@pause", false, false, 'icons', '20')) {
+        //         $this->dispatcher->dispatch('cpu.start', new Signal);
+        //     }
+        // }
     }
 
     public function renderTinyDisplay(Vec2 $pos, Vec2 $size, string $text)
@@ -322,7 +362,22 @@ class GuiRenderer
         $this->vg->stroke();
 
         $this->vg->fontFace('vt323');
-        $this->vg->fontSize(40);
+        
+        $textSize = 40;
+        // note this is really slow obviously
+        // but im lazy and it will do for now as we only have really on 
+        // large display to render
+        if (strlen($text) > 4) {
+            do {
+                $textSize -= 2;
+                $this->vg->fontSize($textSize);
+                $bounds = new Vec4();
+                $w = $this->vg->textBounds($pos->x, $pos->y, $text, $bounds);
+            } while ($w > $size->x);
+        } else {
+            $this->vg->fontSize(40);
+        }
+
         $this->vg->textAlign(VGAlign::LEFT | VGAlign::MIDDLE);
 
 
@@ -381,12 +436,12 @@ class GuiRenderer
         $width = $size->x * 0.5 - $padding;
 
         $this->vg->fontFace('bebas');
-        $this->vg->fontSize(16);
-        $this->vg->textAlign(VGAlign::LEFT | VGAlign::MIDDLE);
+        $this->vg->fontSize(28);
+        $this->vg->textAlign(VGAlign::CENTER | VGAlign::MIDDLE);
         $this->vg->fillColor(new VGColor(0.647, 0.647, 0.647, 1.0));
         $this->vg->text(
-            $pos->x + $padding,
-            $pos->y + $size->y * 0.5,
+            $pos->x + $width * 0.5,
+            $pos->y + $size->y * 0.5 + 2,
             $label
         );
 
@@ -397,7 +452,7 @@ class GuiRenderer
         $this->renderTinyDisplay($dpos, $dsize, $value);
     }
 
-    public function renderStatePanel(float $width, CPU $cpu)
+    public function renderStatePanel(float $width, CPU $cpu) : float
     {
         $pos = new Vec2($this->panelPadding, $this->panelPadding);
         $panelSize = new Vec2($width - $pos->x, 382);
@@ -426,7 +481,7 @@ class GuiRenderer
         
         $this->renderValueDisplay($displayPos, $displaySize, str_pad(dechex($cpu->programCounter), 4, '0', STR_PAD_LEFT), 'Program Counter');
         $displayPos->x = $displayPos->x + $displaySize->x + $gutter;
-        $this->renderValueDisplay($displayPos, $displaySize, str_pad(dechex($cpu->stackPointer), 4, '0', STR_PAD_LEFT), 'Stack Pointer');
+        $this->renderValueDisplay($displayPos, $displaySize, str_pad(dechex($cpu->stackPointer), 2, '0', STR_PAD_LEFT), 'Stack Pointer');
         $displayPos->x = $displayPos->x + $displaySize->x + $gutter;
         $this->renderValueDisplay($displayPos, $displaySize, str_pad(dechex($cpu->registerI), 4, '0', STR_PAD_LEFT), 'Register I');
         $displayPos->x = $displayPos->x + $displaySize->x + $gutter;
@@ -448,5 +503,134 @@ class GuiRenderer
                 $displayPos->y = $displayPos->y + $displaySize->y + $gutter;
             }
         }
+
+        return $pos->y + $panelSize->y + $this->panelPadding;
+    }
+
+    public function renderDissaemblyPanel(float $y, float $width, CPU $cpu) 
+    {
+        $panelPos = new Vec2($this->panelPadding, $y);
+        $panelSize = new Vec2($width - $this->panelPadding, $this->renderState->viewport->height - $y - $this->panelPadding);
+
+        $this->renderBodyPanel($panelPos, $panelSize, false, $this->panelRadius);
+
+        // render display box
+        $displayPos = new Vec2($panelPos->x + 10, $panelPos->y + 10);
+        $displaySize = new Vec2($panelSize->x - 20, $panelSize->y - 20);
+
+        $gradiend = $this->vg->linearGradient(0, $displayPos->y, 0, $displayPos->y + $displaySize->y, $this->displayColorStart, $this->displayColorEnd);
+
+        $this->vg->beginPath();
+        $this->vg->roundedRect($displayPos->x, $displayPos->y, $displaySize->x - $width * 0.5, $displaySize->y, 10);
+        $this->vg->fillPaint($gradiend);
+        $this->vg->strokeColor($this->displayColorBorderer);
+        $this->vg->fill();
+        $this->vg->strokeWidth(2);
+        $this->vg->stroke();
+
+        // draw the current opcode
+        $this->vg->fontFace('vt323');
+        $this->vg->fontSize(16);
+        $this->vg->fillColor($this->displayColorText);
+        $this->vg->textAlign(VGAlign::LEFT | VGAlign::TOP);
+
+        // estimate range based on height of the display
+        $displayInnerSpace = $displaySize->y - 20;
+
+        $range = (int) (($displayInnerSpace / 10) / 2);
+        // $ystart = 50;
+        // $currentInst = $cpu->programCounter;        
+
+        // // dissassemble the next 20 instructions and last 20 instructions
+        // for ($i = $currentInst - $range; $i < $currentInst + $range; $i += 2) {
+        //     if ($i < 0) {
+        //         continue;
+        //     }
+
+        //     if ($i == $currentInst) {
+        //         $this->vg->fillColor(VGColor::red());
+        //     } else {
+        //         $this->vg->fillColor(VGColor::white());
+        //     }
+
+        //     if ($string = $cpu->disassembleInstructionAt($i)) {
+        //         $offset = $i - $currentInst + 20;
+        //         $this->vg->text(10, $ystart + $offset * 10, $string);
+        //     }
+        // }
+
+        $instructionText = "";
+        $currentInst = $cpu->programCounter;
+        for ($i = $currentInst - $range; $i < $currentInst + $range; $i++) {
+            if ($i < 0) {
+                continue;
+            }
+
+            if (!$diss = $cpu->disassembleInstructionAt($i)) {
+                continue;
+            }
+
+            $counterString = str_pad(dechex($i), 4, '0', STR_PAD_LEFT);
+
+            $prefix = $i == $currentInst ? "=> " : "|  ";
+            $instructionText .= $prefix . $counterString . ": " . $diss . "\n";
+        }
+
+        $this->vg->scissor($displayPos->x, $displayPos->y, $displaySize->x, $displaySize->y);
+        $this->vg->textBox($displayPos->x, $displayPos->y, $displaySize->x, $instructionText);
+
+        $this->vg->resetScissor();
+
+        // render start pause reset buttons
+        $buttonPanel = new Vec2($panelPos->x + $width * 0.5 - 10, $panelPos->y + 10);
+
+        if ($this->renderState->cpuIsRunning) {
+            if ($this->renderRoundButton($buttonPanel + new Vec2(30, 30), 30, "@@pause", false, false, 'icons', '20')) {
+                $this->dispatcher->dispatch('cpu.pause', new Signal);
+            }
+        } else {
+            if ($this->renderRoundButton($buttonPanel + new Vec2(30, 30), 30, "@@pause", false, false, 'icons', '20')) {
+                $this->dispatcher->dispatch('cpu.start', new Signal);
+            }
+        }
+
+        if ($this->renderRoundButton($buttonPanel + new Vec2(100, 30), 30, "@@step", false, false, 'icons', '20')) {
+            $cpu->runCycles(1);
+        }
+
+        // reset button on the right
+        if ($this->renderRoundButton($buttonPanel + new Vec2($width * 0.5 - 50, 30), 30, "@@reset", false, false, 'icons', '20')) {
+            $cpu->reset();
+            if ($cpu->currentRomFilePath) {
+                $cpu->loadRomFile($cpu->currentRomFilePath);
+            }
+        }
+
+        // render display with the current rom
+        $this->renderValueDisplay(
+            $buttonPanel + new Vec2(0, $displaySize->y - 100), 
+            new Vec2($displaySize->x * 0.5, 100), 
+            basename($cpu->currentRomFilePath), 
+            'ROM'
+        );
+
+        // if ($this->renderState->cpuIsRunning) {
+        //     // render a play icon
+        //     $this->vg->translate($buttonPanel->x, $buttonPanel->y);
+        //     $this->vg->beginPath();
+        //     $this->vg->moveTo(-5, -8);
+        //     $this->vg->lineTo(-5, 8);
+        //     $this->vg->lineTo(8, 0);
+        //     $this->vg->fillColor(VGColor::white());
+        //     $this->vg->fill();
+        // } else {
+        //     // render a pause icon
+        //     $this->vg->translate($buttonPanel->x, $buttonPanel->y);
+        //     $this->vg->beginPath();
+        //     $this->vg->rect(-5, -8, 5, 16);
+        //     $this->vg->rect(0, -8, 5, 16);
+        //     $this->vg->fillColor(VGColor::white());
+        //     $this->vg->fill();
+        // }
     }
 }

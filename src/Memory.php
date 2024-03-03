@@ -26,4 +26,16 @@ class Memory
         $this->blob[$address] = $opcode >> 8;
         $this->blob[$address + 1] = $opcode & 0x00FF;
     }
+
+    public function fetchSprite(int $address, int $length): UByteBuffer
+    {
+        $sprite = new UByteBuffer();
+        $sprite->fill($length, 0x0);
+
+        for ($i = 0; $i < $length; $i++) {
+            $sprite[$i] = $this->blob[$address + $i];
+        }
+
+        return $sprite;
+    }
 }

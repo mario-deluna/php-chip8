@@ -36,6 +36,8 @@ class CPU
 
     public array $digitSpriteLocations = [];
 
+    public string $currentRomFilePath = '';
+
     public function __construct(
         public Memory $memory,
         public Monitor $monitor
@@ -59,6 +61,8 @@ class CPU
 
     public function loadRomFile(string $filename)
     {
+        $this->currentRomFilePath = $filename;
+
         $data = file_get_contents($filename);
 
         // convert the data to a byte array

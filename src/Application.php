@@ -62,6 +62,10 @@ class Application extends QuickstartApp
             throw new Error('Bebas font could not be loaded.');
         }
 
+        if ($this->vg->createFont('icons', VISU_PATH_RESOURCES . '/font/icons.ttf') === -1) {
+            throw new Error('Icon font could not be loaded.');
+        }
+
         // create the chip8
         $this->monitor = new Monitor;
         $this->chip8 = new CPU(new Memory, $this->monitor);
@@ -97,7 +101,16 @@ class Application extends QuickstartApp
         $this->monitorRenderer = new MonitorRenderer($this->gl, $this->renderState);
 
         // create a renderer for the GUI
-        $this->guiRenderer = new GuiRenderer($this->vg, $this->renderState, $this->input);
+        $this->guiRenderer = new GuiRenderer($this->vg, $this->renderState, $this->input, $this->dispatcher);
+
+        // handle some application events
+        $this->dispatcher->register('cpu.start', function() {
+            $this->isRunning = true;
+        });
+
+        $this->dispatcher->register('cpu.pause', function() {
+            $this->isRunning = false;
+        });
     }
 
     /**
@@ -153,36 +166,8 @@ class Application extends QuickstartApp
     {
         QuickstartDebugMetricsOverlay::debugString('Current opcode: ' . dechex($this->chip8->peekOpcode()));
 
-        $currentInst = $this->chip8->programCounter;
-
         // draw the screen frame
         $this->guiRenderer->renderGUI($this->chip8);
-
-        // draw the current opcode
-        $this->vg->fontFace('vt323');
-        $this->vg->fontSize(16);
-        $this->vg->fillColor(VGColor::white());
-        $this->vg->textAlign(VGAlign::LEFT | VGAlign::TOP);
-
-        $range = 20;
-        $ystart = 50;
-        // dissassemble the next 20 instructions and last 20 instructions
-        for ($i = $currentInst - $range; $i < $currentInst + $range; $i += 2) {
-            if ($i < 0) {
-                continue;
-            }
-
-            if ($i == $currentInst) {
-                $this->vg->fillColor(VGColor::red());
-            } else {
-                $this->vg->fillColor(VGColor::white());
-            }
-
-            if ($string = $this->chip8->disassembleInstructionAt($i)) {
-                $offset = $i - $currentInst + 20;
-                $this->vg->text(10, $ystart + $offset * 10, $string);
-            }
-        }
     }
 
     /**
