@@ -2,7 +2,9 @@
 
 I don't know how many turing mashines deep this is but here is a Chip8 Emulator written in PHP.
 
-It will run basic Chip8 roms, has a simple debugger and I've added a few instructions to the original Chip8 instruction set.
+![с](https://github.com/mario-deluna/php-chip8/assets/956212/b107e1d3-dfd4-4660-8b23-c0dea43ae526)
+
+
 
 ## FAQ
  
