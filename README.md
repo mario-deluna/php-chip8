@@ -6,16 +6,16 @@ I don't know how many turing mashines deep this is but here is a Chip8 Emulator 
 
 ## Features
 
- * **It runs Chip8 ROMs!**<br>
-   This is obvious, but the momemt it started working was magical to me so I'm putting it here.
- * **Debugger**<br>
-   You can step through the code and see the state of the registers and memory.
+* **It runs Chip8 ROMs!**<br>
+  This is obvious, but the momemt it started working was magical to me so I'm putting it here.
+* **Debugger**<br>
+  You can step through the code and see the state of the registers and memory.
    Press `space` to pause or hit the _Pause button_.
   ![stepper](https://github.com/mario-deluna/php-chip8/assets/956212/dbcf3e7c-4652-4f5e-a05e-21e96745d978)
- * As seen in the Demo you can simply drag and drop your roms onto the emulator.
- * **Fullscreen mode**<br>
- * **Virtaul Keyboard**<br>
-   You can use the Keyboard in the GUI or use the keybindings:
+* As seen in the Demo you can simply drag and drop your roms onto the emulator.
+* **Fullscreen mode**<br>
+* **Virtaul Keyboard**<br>
+  You can use the Keyboard in the GUI or use the keybindings:
 
    <img width="275" alt="keyboard" src="https://github.com/mario-deluna/php-chip8/assets/956212/8dd18c0c-3c2b-4ba4-a21a-5da98386a54d">
 
@@ -25,14 +25,14 @@ I don't know how many turing mashines deep this is but here is a Chip8 Emulator 
    | 4 | 5 | 6 | D | `->` | q | w | e | r |
    | 7 | 8 | 9 | E | `->` | a | s | d | f |
    | A | 0 | B | F | `->` | y | x | c | v |
- * **Ghosting Effect**<br>
-   Im honestly not very knowledgeable on old hardware but Im assuming that the old CRTs would take some time for the phosphor to fade out. I tried to emulate this effect by adding a ghosting effect to the display as the flickering otherwise is quite unpleasant.
+* **Ghosting Effect**<br>
+  Im honestly not very knowledgeable on old hardware but Im assuming that the old CRTs would take some time for the phosphor to fade out. I tried to emulate this effect by adding a ghosting effect to the display as the flickering otherwise is quite unpleasant.
    You can change the strength of the effect.
    ![ghosting](https://github.com/mario-deluna/php-chip8/assets/956212/b0014e39-ed44-4bde-a6a1-2f314502a21c)
 
 
- * **CRT Effect**<br>
-   Some might hate this effect, i like it but of course you can turn it off.
+* **CRT Effect**<br>
+  Some might hate this effect, i like it but of course you can turn it off.
    ![crt](https://github.com/mario-deluna/php-chip8/assets/956212/5d2c269c-55fd-481a-8699-0695c258b978)
 
 ## FAQ
