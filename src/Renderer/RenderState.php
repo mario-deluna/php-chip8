@@ -5,6 +5,14 @@ namespace App\Renderer;
 use GL\Math\Vec2;
 use VISU\Graphics\Viewport;
 
+enum GhostingEffectLevel: int
+{
+    case None = 0;
+    case Low = 1;
+    case Medium = 2;
+    case High = 3;
+}
+
 class RenderState
 {
     /**
@@ -27,6 +35,18 @@ class RenderState
      * (Otherwise it will be rendered in the top right corner)
      */
     public bool $fullscreenMonitor = false;
+
+    /**
+     * The current ghosting effect level
+     */
+    public GhostingEffectLevel $ghostingEffectLevel = GhostingEffectLevel::Medium;
+
+    /**
+     * Is the CRT effect enabled?
+     */
+    public bool $crtEffectEnabled = true;
+
+    
 
     public function __construct() {
         $this->viewport = new Viewport(0, 1920, 1080, 0, 1, 1);

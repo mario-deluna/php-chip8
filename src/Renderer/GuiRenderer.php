@@ -38,6 +38,9 @@ class GuiRenderer
     public VGColor $valuePanelColorStart;
     public VGColor $valuePanelColorEnd;
 
+    private array $lastButtonPress = [];
+    private array $knobStaticPos = [];
+
     public function __construct(
         private VGContext $vg,
         private RenderState $renderState,
@@ -171,6 +174,19 @@ class GuiRenderer
         $this->vg->fill();
         $this->vg->stroke();
 
+        // render a fullscreen button on the right
+        if ($this->renderRoundButton(
+            new Vec2($pos->x + $size->x - 20, $pos->y),
+            20,
+            $this->renderState->fullscreenMonitor ? '@@fullscreen' : '@@fullscreen',
+            false,
+            false,
+            'icons',
+            20
+        )) {
+            $this->renderState->fullscreenMonitor = !$this->renderState->fullscreenMonitor;
+        }
+
         return new Vec2($framePos->x, $frontPanelVBB->y);
     }
 
@@ -206,8 +222,7 @@ class GuiRenderer
             $text = $parts[0];
         }
 
-        $buttonId = ((string) $pos) . $id;
-        static $lastButtonPress = [];
+        $buttonId = ((string) $pos->x . (string) $pos->y) . $id;
 
         // render a the indent for the button
         $this->vg->beginPath();
@@ -220,15 +235,15 @@ class GuiRenderer
         $this->vg->circle($pos->x, $pos->y, $radius * 0.9);
         $this->vg->fillColor(VGColor::black());
         if (($isHovering && ($isPressed || $didPress)) || $isActive) {
-            $lastButtonPress[$buttonId] = glfwGetTime();
+            $this->lastButtonPress[$buttonId] = glfwGetTime();
         }
         $this->vg->fill();
 
         // we fade out the highlight after a while
         $hoveringTime = 2.0;
-        if (isset($lastButtonPress[$buttonId]) && glfwGetTime() - $lastButtonPress[$buttonId] < $hoveringTime) {
+        if (isset($this->lastButtonPress[$buttonId]) && glfwGetTime() - $this->lastButtonPress[$buttonId] < $hoveringTime) {
 
-            $fadeDelta = $lastButtonPress[$buttonId] - glfwGetTime() + $hoveringTime;
+            $fadeDelta = $this->lastButtonPress[$buttonId] - glfwGetTime() + $hoveringTime;
             $fadeDelta /= $hoveringTime;
 
             $this->vg->beginPath();
@@ -282,6 +297,103 @@ class GuiRenderer
         return $didPress;
     }
 
+    public function renderSelectorSwitch(Vec2 $pos, Vec2 $size, &$value, array $labels)
+    {
+        $selectorId = 'sel'.((string) $pos->x . (string) $pos->y);
+
+        $r = $size->y * 0.5;
+
+        $this->vg->beginPath();
+        $this->vg->fillColor(new VGColor(0, 0, 0, 0.3));
+        $this->vg->roundedRect($pos->x, $pos->y, $size->x, $size->y, $r);
+        
+        $gradient = $this->getIndetGradient($pos->y, $pos->y + $size->y);
+        $this->vg->strokePaint($gradient);
+        $this->vg->fill();
+        $this->vg->strokeWidth(2);
+        $this->vg->stroke();
+
+        // get the center points
+        $settings = count($labels);
+
+        $w = ($size->x - $r * 2);
+        $spacing = $w / ($settings - 1);
+
+        $centerPoints = [];
+        for ($i = 0; $i < $settings; $i++) {
+            $centerPoints[] = $pos->x + $r + $spacing * $i;
+        }
+
+
+        // render a line from first to last
+        $innerGuideColor = new VGColor(0.2, 0.2, 0.2, 1.0);
+        $this->vg->beginPath();
+        $this->vg->moveTo($pos->x + $r, $pos->y + $size->y * 0.5);
+        $this->vg->lineTo($pos->x + $size->x - $r, $pos->y + $size->y * 0.5);
+        $this->vg->strokeColor($innerGuideColor);
+        $this->vg->strokeWidth(5);
+        $this->vg->stroke();
+
+        // render a circle for each setting
+        $this->vg->fillColor($innerGuideColor);
+        for ($i = 0; $i < $settings; $i++) {
+            $p = $centerPoints[$i];
+            $this->vg->beginPath();
+            $this->vg->circle($p, $pos->y + $size->y * 0.5, $r * 0.25);
+            $this->vg->fill();
+
+            // handle selection
+            if ($this->input->hasMouseButtonBeenPressedThisFrame(MouseButton::LEFT)) {
+                if ($this->input->getCursorPosition()->distanceTo(new Vec2($p, $pos->y + $size->y * 0.5)) < $r) {
+                    $value = array_keys($labels)[$i];
+                }
+            }
+        }
+
+        // render a label on top
+        $this->vg->fontFace('bebas');
+        $this->vg->fontSize(16);
+        $this->vg->textAlign(VGAlign::CENTER | VGAlign::MIDDLE);
+
+        foreach ($labels as $label) {
+            $i = array_search($label, $labels);
+            $p = $centerPoints[$i];
+            
+            // white if its the current value
+            $this->vg->fillColor($value === $i ? VGColor::white() : VGColor::white()->darken(0.15));
+            $this->vg->text($p, $pos->y - 20, $label);
+        }
+
+        // render a knob for the current value
+        $knobAtIndex = array_search($value, array_keys($labels));
+        $knobPos = $centerPoints[$knobAtIndex];
+
+        if (!isset($this->knobStaticPos[$selectorId])) {
+            $this->knobStaticPos[$selectorId] = $knobPos;
+        }
+
+        // move the knob closer to the target
+        $this->knobStaticPos[$selectorId] = $this->knobStaticPos[$selectorId] + ($knobPos - $this->knobStaticPos[$selectorId]) * 0.1;
+        $realKnobPos = $this->knobStaticPos[$selectorId];
+
+        // knob color
+        $knobColorOuterStart = new VGColor(0.918, 0.933, 0.937, 1.0);
+        $knobColorOuterEnd = new VGColor(0.459, 0.475, 0.478, 1.0);
+        $knobColorInnerStart = new VGColor(0.514, 0.553, 0.549, 1.0);
+        $knobColorInnerEnd = new VGColor(0.71, 0.725, 0.729, 1.0);
+
+        $this->vg->beginPath();
+        $this->vg->circle($realKnobPos, $pos->y + $size->y * 0.5, $r * 0.6);
+        $knobFillPaint = $this->vg->linearGradient($realKnobPos - $r, $pos->y, $realKnobPos + $r, $pos->y + $size->y, $knobColorInnerStart, $knobColorInnerEnd);
+        $this->vg->fillPaint($knobFillPaint);
+        $this->vg->fill();
+        
+        $knobStrokePaint = $this->vg->linearGradient($realKnobPos - $r, $pos->y, $realKnobPos + $r, $pos->y + $size->y, $knobColorOuterStart, $knobColorOuterEnd);
+        $this->vg->strokePaint($knobStrokePaint);
+        $this->vg->strokeWidth(8);
+        $this->vg->stroke();
+    }
+
     public function renderKeyboard(Vec2 $startPos, CPU $cpu)
     {
         $startPos->y = $startPos->y + $this->panelPadding;
@@ -311,6 +423,8 @@ class GuiRenderer
         ];
 
         $buttonHalfSpace = ($innerSize->y / 4) * 0.5;
+        $buttonHalfSpace = min($buttonHalfSpace, ($innerSize->x * 0.4 / 4) * 0.5);
+        $buttonHalfSpace = max($buttonHalfSpace, 20);
         $cpu->wantKeyboardUpdates = true;
 
         for ($y = 0; $y < 4; $y++) {
@@ -338,15 +452,49 @@ class GuiRenderer
             }
         }
 
-        // if ($this->renderState->fullscreenMonitor) {
-        //     if ($this->renderRoundButton($innerPos + new Vec2(30, 30), 30, "@@pause", false, false, 'icons', '20')) {
-        //         $this->dispatcher->dispatch('cpu.pause', new Signal);
-        //     }
-        // } else {
-        //     if ($this->renderRoundButton($innerPos + new Vec2(30, 30), 30, "@@pause", false, false, 'icons', '20')) {
-        //         $this->dispatcher->dispatch('cpu.start', new Signal);
-        //     }
-        // }
+        $rightSidePos = $innerPos + new Vec2($innerSize->x * 0.5, 0);
+        $rightSideSize = $innerSize * new Vec2(0.5, 1);
+
+        // render a persitance of vision selector switch
+        $labelPos = $rightSidePos + new Vec2(20, 68);
+        $this->vg->fontFace('bebas');
+        $this->vg->fontSize(16);
+        $this->vg->textAlign(VGAlign::RIGHT | VGAlign::MIDDLE);
+        $this->vg->fillColor(VGColor::white());
+        $this->vg->text($labelPos->x, $labelPos->y, 'Ghosting');
+
+        $currentGhostingValue = $this->renderState->ghostingEffectLevel->value;
+        $this->renderSelectorSwitch($rightSidePos + new Vec2(20 + 20, 50), new Vec2($rightSideSize->x - 60, 35), $currentGhostingValue, [
+            GhostingEffectLevel::None->value => 'None',
+            GhostingEffectLevel::Low->value => 'Low',
+            GhostingEffectLevel::Medium->value => 'Medium',
+            GhostingEffectLevel::High->value => 'High',
+        ]);
+
+        $this->renderState->ghostingEffectLevel = GhostingEffectLevel::from($currentGhostingValue);
+
+        // crt effect toggle
+        $labelPos = $rightSidePos + new Vec2(20, 168);
+        $this->vg->fontFace('bebas');
+        $this->vg->fontSize(16);
+        $this->vg->textAlign(VGAlign::RIGHT | VGAlign::MIDDLE);
+        $this->vg->fillColor(VGColor::white());
+        $this->vg->text($labelPos->x, $labelPos->y, 'CRT Effect');
+
+        $this->renderSelectorSwitch($rightSidePos + new Vec2(20 + 20, 150), new Vec2($rightSideSize->x - 60, 35), $this->renderState->crtEffectEnabled, [
+            false => 'Off',
+            true => 'On',
+        ]);
+
+        if ($this->renderState->fullscreenMonitor) {
+            if ($this->renderRoundButton($innerPos + new Vec2(30, 30), 30, "@@pause", false, false, 'icons', '20')) {
+                $this->dispatcher->dispatch('cpu.pause', new Signal);
+            }
+        } else {
+            if ($this->renderRoundButton($innerPos + new Vec2(30, 30), 30, "@@pause", false, false, 'icons', '20')) {
+                $this->dispatcher->dispatch('cpu.start', new Signal);
+            }
+        }
     }
 
     public function renderTinyDisplay(Vec2 $pos, Vec2 $size, string $text)

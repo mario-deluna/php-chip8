@@ -30,16 +30,6 @@ class MonitorRenderer
     public bool $monochrome = true;
 
     /**
-     * Enable / Disable the CRT effect
-     */
-    public bool $crtEffect = true;
-
-    /**
-     * Enable / Disable the ghosting effect
-     */
-    public bool $ghostingEffect = true;
-
-    /**
      * Constructor 
      * 
      * @param GLState $glstate The current GL state.
@@ -183,14 +173,16 @@ class MonitorRenderer
         in vec2 tex_coords;
 
         uniform sampler2D u_texture;
+        uniform float u_ghosting_amount;
 
         void main()
         {
             vec4 color = texture(u_texture, tex_coords);
 
             // slightly darken the color
-            //color *= 0.995;
-            color *= 0.99;
+            // color *= 0.995;
+            // color *= 0.99;
+            color *= u_ghosting_amount;
 
             fragment_color = color;
         }
@@ -300,6 +292,15 @@ class MonitorRenderer
                     $this->shaderProgramGhosting,
                 );
 
+                $ghostAmount = match ($this->renderState->ghostingEffectLevel) {
+                    GhostingEffectLevel::None => 0.0,
+                    GhostingEffectLevel::Low => 0.95,
+                    GhostingEffectLevel::Medium => 0.98,
+                    GhostingEffectLevel::High => 0.995,
+                };
+
+                $ghostPass->extraUniforms['u_ghosting_amount'] = $ghostAmount;
+
                 $pipeline->addPass($ghostPass);
 
                 // then render the monitor on the ghosting target aswell
@@ -308,7 +309,7 @@ class MonitorRenderer
                     $texture,
                     $this->shaderProgramScreen,
                 );
-                $screenPass->shouldBlend = $this->ghostingEffect;
+                $screenPass->shouldBlend = $this->renderState->ghostingEffectLevel != GhostingEffectLevel::None;
                 $screenPass->extraUniforms['u_monochrome'] = (int) $this->monochrome;
 
                 $pipeline->addPass($screenPass);
@@ -356,7 +357,7 @@ class MonitorRenderer
                 // }
 
                 $quadPass->extraUniforms['u_time'] = glfwGetTime();
-                $quadPass->extraUniforms['u_crt_effect'] = (int) $this->crtEffect;
+                $quadPass->extraUniforms['u_crt_effect'] = (int) $this->renderState->crtEffectEnabled;
 
                 $pipeline->addPass($quadPass);
 

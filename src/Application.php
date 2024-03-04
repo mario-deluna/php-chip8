@@ -2,6 +2,7 @@
 
 namespace App;
 
+use App\Renderer\GhostingEffectLevel;
 use App\Renderer\GuiRenderer;
 use App\Renderer\MonitorRenderer;
 use App\Renderer\RenderState;
@@ -164,7 +165,7 @@ class Application extends QuickstartApp
      */
     public function draw(RenderContext $context, RenderTarget $renderTarget) : void
     {
-        QuickstartDebugMetricsOverlay::debugString('Current opcode: ' . dechex($this->chip8->peekOpcode()));
+        QuickstartDebugMetricsOverlay::debugString('Press "F" to toggle fullscreen');
 
         // draw the screen frame
         $this->guiRenderer->renderGUI($this->chip8);
@@ -200,12 +201,17 @@ class Application extends QuickstartApp
 
         // toggle crt effect
         if ($this->inputContext->actions->didButtonPress('toggle_crt')) {
-            $this->monitorRenderer->crtEffect = !$this->monitorRenderer->crtEffect;
+            $this->renderState->crtEffectEnabled = !$this->renderState->crtEffectEnabled;
         }
 
         // toggle ghosting
         if ($this->inputContext->actions->didButtonPress('toggle_ghosting')) {
-            $this->monitorRenderer->ghostingEffect = !$this->monitorRenderer->ghostingEffect;
+            $this->renderState->ghostingEffectLevel = match ($this->renderState->ghostingEffectLevel) {
+                GhostingEffectLevel::None => GhostingEffectLevel::Low,
+                GhostingEffectLevel::Low => GhostingEffectLevel::Medium,
+                GhostingEffectLevel::Medium => GhostingEffectLevel::High,
+                GhostingEffectLevel::High => GhostingEffectLevel::None,
+            };
         }
 
         // update the keyboard states
