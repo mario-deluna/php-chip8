@@ -1,4 +1,4 @@
-# PHP ChipEight Emulator
+# PHP Chip-8 Emulator
 
 I don't know how many turing mashines deep this is but here is a Chip8 Emulator written in PHP. 
 
