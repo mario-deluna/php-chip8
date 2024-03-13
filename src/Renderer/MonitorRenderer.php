@@ -24,12 +24,6 @@ class MonitorRenderer
     private ShaderProgram $shaderProgramScreen;
 
     /**
-     * MonoChrome mode
-     * This just means the monitor will be rendered in black and white
-     */
-    public bool $monochrome = true;
-
-    /**
      * Constructor 
      * 
      * @param GLState $glstate The current GL state.
@@ -310,7 +304,7 @@ class MonitorRenderer
                     $this->shaderProgramScreen,
                 );
                 $screenPass->shouldBlend = $this->renderState->ghostingEffectLevel != GhostingEffectLevel::None;
-                $screenPass->extraUniforms['u_monochrome'] = (int) $this->monochrome;
+                $screenPass->extraUniforms['u_monochrome'] = (int) $this->renderState->monochrome;
 
                 $pipeline->addPass($screenPass);
 

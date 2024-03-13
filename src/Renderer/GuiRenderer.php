@@ -455,8 +455,20 @@ class GuiRenderer
         $rightSidePos = $innerPos + new Vec2($innerSize->x * 0.5, 0);
         $rightSideSize = $innerSize * new Vec2(0.5, 1);
 
+        // split right side height into N panels
+        $rightSideSubElCount = 3; 
+        $rightSideItemSize = $rightSideSize->y / $rightSideSubElCount;
+
+        // we need the middle point of each 
+        $vstackPositions = [];
+        for($i = 0; $i < $rightSideSubElCount; $i++) {
+            $vstackPositions[] = $rightSideItemSize * $i + $rightSideItemSize * 0.5;
+        }
+
+        $labelVOff = 17;
+
         // render a persitance of vision selector switch
-        $labelPos = $rightSidePos + new Vec2(20, 68);
+        $labelPos = $rightSidePos + new Vec2(20, $vstackPositions[0] + $labelVOff);
         $this->vg->fontFace('bebas');
         $this->vg->fontSize(16);
         $this->vg->textAlign(VGAlign::RIGHT | VGAlign::MIDDLE);
@@ -464,7 +476,7 @@ class GuiRenderer
         $this->vg->text($labelPos->x, $labelPos->y, 'Ghosting');
 
         $currentGhostingValue = $this->renderState->ghostingEffectLevel->value;
-        $this->renderSelectorSwitch($rightSidePos + new Vec2(20 + 20, 50), new Vec2($rightSideSize->x - 60, 35), $currentGhostingValue, [
+        $this->renderSelectorSwitch($rightSidePos + new Vec2(20 + 20, $vstackPositions[0]), new Vec2($rightSideSize->x - 60, 35), $currentGhostingValue, [
             GhostingEffectLevel::None->value => 'None',
             GhostingEffectLevel::Low->value => 'Low',
             GhostingEffectLevel::Medium->value => 'Medium',
@@ -474,27 +486,41 @@ class GuiRenderer
         $this->renderState->ghostingEffectLevel = GhostingEffectLevel::from($currentGhostingValue);
 
         // crt effect toggle
-        $labelPos = $rightSidePos + new Vec2(20, 168);
+        $labelPos = $rightSidePos + new Vec2(20, $vstackPositions[1] + $labelVOff);
         $this->vg->fontFace('bebas');
         $this->vg->fontSize(16);
         $this->vg->textAlign(VGAlign::RIGHT | VGAlign::MIDDLE);
         $this->vg->fillColor(VGColor::white());
         $this->vg->text($labelPos->x, $labelPos->y, 'CRT Effect');
 
-        $this->renderSelectorSwitch($rightSidePos + new Vec2(20 + 20, 150), new Vec2($rightSideSize->x - 60, 35), $this->renderState->crtEffectEnabled, [
+        $this->renderSelectorSwitch($rightSidePos + new Vec2(20 + 20, $vstackPositions[1]), new Vec2($rightSideSize->x - 60, 35), $this->renderState->crtEffectEnabled, [
             false => 'Off',
             true => 'On',
         ]);
 
-        if ($this->renderState->fullscreenMonitor) {
-            if ($this->renderRoundButton($innerPos + new Vec2(30, 30), 30, "@@pause", false, false, 'icons', '20')) {
-                $this->dispatcher->dispatch('cpu.pause', new Signal);
-            }
-        } else {
-            if ($this->renderRoundButton($innerPos + new Vec2(30, 30), 30, "@@pause", false, false, 'icons', '20')) {
-                $this->dispatcher->dispatch('cpu.start', new Signal);
-            }
-        }
+        // monochrome effect toggle
+        $labelPos = $rightSidePos + new Vec2(20, $vstackPositions[2] + $labelVOff);
+        $this->vg->fontFace('bebas');
+        $this->vg->fontSize(16);
+        $this->vg->textAlign(VGAlign::RIGHT | VGAlign::MIDDLE);
+        $this->vg->fillColor(VGColor::white());
+        $this->vg->text($labelPos->x, $labelPos->y, 'Monochrome');
+
+        $this->renderSelectorSwitch($rightSidePos + new Vec2(20 + 20, $vstackPositions[2]), new Vec2($rightSideSize->x - 60, 35), $this->renderState->monochrome, [
+            false => 'Off',
+            true => 'On',
+        ]);
+
+
+        // if ($this->renderState->fullscreenMonitor) {
+        //     if ($this->renderRoundButton($innerPos + new Vec2(30, 30), 30, "@@pause", false, false, 'icons', '20')) {
+        //         $this->dispatcher->dispatch('cpu.pause', new Signal);
+        //     }
+        // } else {
+        //     if ($this->renderRoundButton($innerPos + new Vec2(30, 30), 30, "@@pause", false, false, 'icons', '20')) {
+        //         $this->dispatcher->dispatch('cpu.start', new Signal);
+        //     }
+        // }
     }
 
     public function renderTinyDisplay(Vec2 $pos, Vec2 $size, string $text)
@@ -751,6 +777,63 @@ class GuiRenderer
             $cpu->reset();
             if ($cpu->currentRomFilePath) {
                 $cpu->loadRomFile($cpu->currentRomFilePath);
+            }
+        }
+
+        // render the simulation speed
+        // make it a bit more human readable
+        $effectiveSpeed = $this->renderState->cyclesPerTick - RenderState::SUBTICK_DIV;
+        $simSpeedHuman = $effectiveSpeed;
+        if ($simSpeedHuman === 0) {
+            $simSpeedHuman = '60tps';
+        }
+        else if ($simSpeedHuman < 0) {
+            $simSpeedHuman = '1/' . $simSpeedHuman * -1;
+        }
+
+        $simSpeedDispW = $displaySize->x * 0.3;
+        $this->renderRegisterDisplay(
+            $buttonPanel + new Vec2(0, $displaySize->y - 170), 
+            new Vec2($simSpeedDispW, 50), 
+            $simSpeedHuman, 
+            'CpT',
+            0.9
+        );
+
+        // buttons to change the simulation speed
+        if ($this->renderRoundButton(
+            $buttonPanel + new Vec2($simSpeedDispW + 30, $displaySize->y - 170 + 25), 
+            20,
+            '+'
+        )) {
+            
+            if ($effectiveSpeed > 200) {
+                $this->renderState->cyclesPerTick += 100;
+            } elseif ($effectiveSpeed > 50) {
+                $this->renderState->cyclesPerTick += 10;
+            } elseif ($effectiveSpeed > 20) {
+                $this->renderState->cyclesPerTick += 5;
+            } elseif ($effectiveSpeed > 10) {
+                $this->renderState->cyclesPerTick += 2;
+            } else {
+                $this->renderState->cyclesPerTick++;
+            }
+        }
+        if ($this->renderRoundButton(
+            $buttonPanel + new Vec2($simSpeedDispW + 80, $displaySize->y - 170 + 25), 
+            20,
+            '-'
+        )) {
+            if ($effectiveSpeed > 200) {
+                $this->renderState->cyclesPerTick -= 100;
+            } elseif ($effectiveSpeed > 50) {
+                $this->renderState->cyclesPerTick -= 10;
+            } elseif ($effectiveSpeed > 20) {
+                $this->renderState->cyclesPerTick -= 5;
+            } elseif ($effectiveSpeed > 10) {
+                $this->renderState->cyclesPerTick -= 2;
+            } else {
+                $this->renderState->cyclesPerTick--;
             }
         }
 

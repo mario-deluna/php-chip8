@@ -46,8 +46,26 @@ class RenderState
      */
     public bool $crtEffectEnabled = true;
 
-    
+    /**
+     * MonoChrome mode
+     * This just means the monitor will be rendered in black and white
+     */
+    public bool $monochrome = true;
 
+    /**
+     * How many cycles should the CPU go through each update tick
+     * 
+     * The update runs at 60 ticks per second.
+     * There is a proper way to determine this but I just eyeballed it till the games 
+     * felt right.
+     * 
+     */
+    public int $cyclesPerTick = 72;
+    public const SUBTICK_DIV = 64;
+
+    /**
+     * Constructor 
+     */
     public function __construct() {
         $this->viewport = new Viewport(0, 1920, 1080, 0, 1, 1);
         $this->monitorOffest = new Vec2(25.0, -25.0);

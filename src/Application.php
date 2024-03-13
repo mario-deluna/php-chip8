@@ -239,7 +239,18 @@ class Application extends QuickstartApp
         }
 
         $this->chip8->updateTimers();
-        if ($this->chip8->runCycles(8) === 0) {
+
+        // quick sanity check on the cycles per tick value
+        $this->renderState->cyclesPerTick = max(1, min(5000, $this->renderState->cyclesPerTick));
+
+        // effective cylces that should be run
+        if ($this->renderState->cyclesPerTick > RenderState::SUBTICK_DIV) {
+            $effectiveCycles = $this->renderState->cyclesPerTick -  RenderState::SUBTICK_DIV;
+        } else {
+            $effectiveCycles = (int) ($this->tickIndex % ((RenderState::SUBTICK_DIV + 1) - $this->renderState->cyclesPerTick) === 0);
+        }
+
+        if ($this->chip8->runCycles($effectiveCycles) === 0) {
             $this->isRunning = false;
         }
     }
